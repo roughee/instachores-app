@@ -670,3 +670,20 @@ describe('SheetsRepo: review fixes', () => {
     expect(urls.every((u) => u === other.url)).toBe(true)
   })
 })
+
+describe('SheetsRepo: version', () => {
+  it('asks the script for its version and returns the string', async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(parsedBody(init).action).toBe('version')
+      return jsonResponse({ ok: true, version: '1.2.0' })
+    })
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+    await expect(repo.version()).resolves.toBe('1.2.0')
+  })
+})

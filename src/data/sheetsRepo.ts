@@ -270,6 +270,12 @@ export class SheetsRepo implements HouseholdRepo {
     return () => this.eventWatchers.delete(watcher)
   }
 
+  /** The deployed script's version string, shown in the Sync panel. */
+  async version(): Promise<string> {
+    const res = await postAction<{ version: string }>(this.fetchImpl, this.link.url, this.link.secret, 'version', {})
+    return String(res.version)
+  }
+
   /** For the sync store (#15): status of the outbox, the poller and the last poll. */
   watchStatus(cb: (s: SheetsRepoStatus) => void): Unsubscribe {
     this.statusWatchers.add(cb)
