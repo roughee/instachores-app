@@ -1,0 +1,1 @@
+import{B as e,b as t,f as n,o as r}from"./_plugin-vue_export-helper-DSMVPOe4.js";import{h as i}from"./index-TBzBjhAg.js";import{t as a}from"./EmptyState-slHMyVc-.js";var o=n({__name:`TodayScreen`,setup(n){return(n,o)=>(t(),r(a,{icon:e(i),label:`See what happened today once someone logs a task.`},null,8,[`icon`]))}});export{o as default};
