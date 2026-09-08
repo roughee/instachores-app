@@ -7,7 +7,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { HouseholdRepo, RepoStatus, SyncResult, Unsubscribe } from '@/data/repo'
+import type { HouseholdRepo, RepoStatus, SkippedRow, SyncResult, Unsubscribe } from '@/data/repo'
 import { isVersionCapable } from './sessionOptions'
 
 export const useSyncStore = defineStore('sync', () => {
@@ -16,6 +16,7 @@ export const useSyncStore = defineStore('sync', () => {
   const lastPollAt = ref<Date | undefined>(undefined)
   const lastError = ref<string | undefined>(undefined)
   const skippedRows = ref(0)
+  const lastSkipped = ref<SkippedRow | undefined>(undefined)
   const intervalMs = ref(0)
   const scriptVersion = ref<string | undefined>(undefined)
 
@@ -28,6 +29,7 @@ export const useSyncStore = defineStore('sync', () => {
     lastPollAt.value = s.lastPollAt
     lastError.value = s.lastError
     skippedRows.value = s.skippedRows
+    lastSkipped.value = s.lastSkipped
     intervalMs.value = s.intervalMs
   }
 
@@ -69,6 +71,7 @@ export const useSyncStore = defineStore('sync', () => {
     lastPollAt,
     lastError,
     skippedRows,
+    lastSkipped,
     intervalMs,
     scriptVersion,
     bind,

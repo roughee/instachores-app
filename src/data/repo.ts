@@ -17,6 +17,12 @@ export interface SyncResult {
 
 export type RepoErrorCode = 'unauthorized' | 'conflict' | 'invalid' | 'locked' | 'network'
 
+/** The tab and id of one row the parser dropped (Plan §5.5 Settings, Sync panel). */
+export interface SkippedRow {
+  tab: string
+  id: string
+}
+
 /** What the sync store reads for the status dot and the Sync panel. */
 export interface RepoStatus {
   online: boolean
@@ -25,6 +31,8 @@ export interface RepoStatus {
   lastError: string | undefined
   /** Rows dropped because they failed to parse, across polls and snapshot loads. */
   skippedRows: number
+  /** The most recent row dropped while parsing the Apps Script response; `undefined` until one is. */
+  lastSkipped: SkippedRow | undefined
   intervalMs: number
 }
 

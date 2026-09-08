@@ -38,6 +38,17 @@ export function decodeSetupLink(encoded: string): SetupLink {
 }
 
 /**
+ * Rebuilds the shareable setup-link URL for `link` (issue #21, Plan §5.5
+ * Settings, Architecture.md §7: `https://<host>/<path>/#/welcome?s=<token>`).
+ * `origin` and `pathname` are passed in rather than read from `location`
+ * directly, so this stays pure and works the same on GitHub Pages, a PR
+ * preview subfolder, and local dev.
+ */
+export function buildSetupLinkUrl(link: SetupLink, origin: string, pathname: string): string {
+  return `${origin}${pathname}#/welcome?s=${encodeSetupLink(link)}`
+}
+
+/**
  * Pulls the `s=` token out of a pasted full setup-link URL (issue #16,
  * Architecture.md §7: `https://<user>.github.io/homecrew/#/welcome?s=<token>`).
  * A bare token -- what the Welcome screen's field is pre-filled with when the

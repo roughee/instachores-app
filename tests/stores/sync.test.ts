@@ -19,6 +19,7 @@ describe('syncStore.bind', () => {
     expect(store.lastPollAt).toBeUndefined()
     expect(store.lastError).toBeUndefined()
     expect(store.skippedRows).toBe(0)
+    expect(store.lastSkipped).toBeUndefined()
   })
 
   it('follows status changes the repo announces', () => {
@@ -31,6 +32,7 @@ describe('syncStore.bind', () => {
       lastPollAt: Date | undefined
       lastError: string | undefined
       skippedRows: number
+      lastSkipped: { tab: string; id: string } | undefined
       intervalMs: number
     }) => void)[] = []
     vi.spyOn(repo, 'watchStatus').mockImplementation((cb) => {
@@ -41,6 +43,7 @@ describe('syncStore.bind', () => {
         lastPollAt: undefined,
         lastError: 'boom',
         skippedRows: 1,
+        lastSkipped: { tab: 'events', id: 'ev-bad' },
         intervalMs: 30_000,
       })
       return () => undefined
@@ -50,6 +53,7 @@ describe('syncStore.bind', () => {
     expect(store.outboxCount).toBe(3)
     expect(store.lastError).toBe('boom')
     expect(store.skippedRows).toBe(1)
+    expect(store.lastSkipped).toEqual({ tab: 'events', id: 'ev-bad' })
     expect(store.intervalMs).toBe(30_000)
   })
 })

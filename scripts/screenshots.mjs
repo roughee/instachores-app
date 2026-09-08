@@ -210,3 +210,18 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 20-category-bathroom-x2-${scheme}.png`)
 }
+
+// Issue #21: Settings (household + setup link, appearance, sync panel,
+// disconnect, about). Demo mode is fine for the screenshot: MemoryRepo has
+// no real setup link to show, but the demo one still round-trips the URL.
+// A tall viewport (instead of `fullPage`) keeps the whole screen in one
+// shot without the fixed bottom tab bar repeating mid-page.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 1500 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/settings`, { waitUntil: 'networkidle' })
+  await page.getByText('Sync now').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}21-settings-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 21-settings-${scheme}.png`)
+}
