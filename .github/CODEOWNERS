@@ -1,0 +1,6 @@
+# Add the second partner's GitHub handle here once they join, e.g. * @roughee @partner-handle
+* @roughee
+
+# docs/design/**, src/components/** and src/screens/** additionally require the
+# UI pre-flight checklist from docs/design/DESIGN.md §8 to be honestly checked
+# off in the PR, on top of the same owner review above.

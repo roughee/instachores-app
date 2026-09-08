@@ -10,6 +10,7 @@ Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite,
 - `docs/Testing.md`: the testing loop, coverage gates, fixture rules, mutation checks.
 - `docs/design/DESIGN.md`: design read, dials, color tokens, components, dark-mode protocol, UI pre-flight.
 - `docs/agents/`: per-repo configuration read by the engineering skills.
+- `docs/Process.md`: labels, branch naming, branch-protection settings, and the squash commit message format.
 - `.claude/skills/`: vendored skills (see below).
 
 ## Commands
