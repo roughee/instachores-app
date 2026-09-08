@@ -32,8 +32,14 @@ const defaultLog: RepoLog = (message, detail) => console.warn(message, detail)
 export class Outbox {
   private readonly store: KvStore
   private readonly log: RepoLog
-  /** Serializes flushes: each call waits for the previous one to settle. */
+  /** Serializes every read-modify-write (enqueue and flush) so none overlaps. */
   private queue: Promise<unknown> = Promise.resolve()
+
+  private withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(fn, fn)
+    this.queue = result.catch(() => undefined)
+    return result
+  }
 
   constructor(store: KvStore = createIdbKvStore('outbox'), options: { log?: RepoLog } = {}) {
     this.store = store
@@ -57,13 +63,15 @@ export class Outbox {
   }
 
   /** Enqueuing a payload id already pending is a no-op. */
-  async enqueue(kind: OutboxKind, payload: Payload): Promise<void> {
-    const entries = await this.readEntries()
-    const id = payloadId(payload)
-    if (entries.some((e) => payloadId(e.payload) === id)) return
-    const seq = entries.reduce((max, e) => Math.max(max, e.seq), 0) + 1
-    const entry = OutboxEntry.parse({ seq, kind, payload, enqueuedAt: new Date() })
-    await this.writeEntries([...entries, entry])
+  enqueue(kind: OutboxKind, payload: Payload): Promise<void> {
+    return this.withLock(async () => {
+      const entries = await this.readEntries()
+      const id = payloadId(payload)
+      if (entries.some((e) => payloadId(e.payload) === id)) return
+      const seq = entries.reduce((max, e) => Math.max(max, e.seq), 0) + 1
+      const entry = OutboxEntry.parse({ seq, kind, payload, enqueuedAt: new Date() })
+      await this.writeEntries([...entries, entry])
+    })
   }
 
   /** Pending entries in the order they were enqueued. */
@@ -73,20 +81,17 @@ export class Outbox {
 
   /**
    * Sends every pending entry, oldest first, then removes only the ones
-   * whose payload id came back in `confirmedIds`. A flush already in
-   * progress is waited for first, so sends never overlap.
+   * whose payload id came back in `confirmedIds`. Enqueues and flushes share
+   * one lock, so a tap during a send waits and is never written over.
    */
-  async flush(send: (entries: OutboxEntry[]) => Promise<{ confirmedIds: string[] }>): Promise<FlushResult> {
-    const run = async (): Promise<FlushResult> => {
+  flush(send: (entries: OutboxEntry[]) => Promise<{ confirmedIds: string[] }>): Promise<FlushResult> {
+    return this.withLock(async () => {
       const entries = await this.readEntries()
       const { confirmedIds } = await send(entries)
       const confirmed = new Set(confirmedIds)
       const remaining = entries.filter((e) => !confirmed.has(payloadId(e.payload)))
       await this.writeEntries(remaining)
       return { sent: entries.length, confirmed: entries.length - remaining.length, remaining: remaining.length }
-    }
-    const result = this.queue.then(run, run)
-    this.queue = result.catch(() => undefined)
-    return result
+    })
   }
 }

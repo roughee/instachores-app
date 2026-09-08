@@ -175,3 +175,32 @@ describe('Outbox', () => {
     expect(result).toEqual({ sent: 1, confirmed: 1, remaining: 0 })
   })
 })
+
+describe('Outbox under concurrent writes', () => {
+  it('an enqueue that lands while a flush is mid-send is not lost when the flush writes back', async () => {
+    const outbox = new Outbox(memoryStore())
+    const t = task()
+    const a = complete(t)
+    const b = complete(t)
+    await outbox.enqueue('events.append', a)
+
+    let resolveSend: (v: { confirmedIds: string[] }) => void = () => {}
+    const sendStarted = new Promise<void>((started) => {
+      void outbox.flush(
+        () =>
+          new Promise((resolve) => {
+            resolveSend = resolve
+            started()
+          }),
+      )
+    })
+    await sendStarted
+
+    const enqueued = outbox.enqueue('events.append', b)
+    resolveSend({ confirmedIds: [a.id] })
+    await enqueued
+
+    const remaining = await outbox.pending()
+    expect(remaining.map((e) => e.payload.id)).toEqual([b.id])
+  })
+})
