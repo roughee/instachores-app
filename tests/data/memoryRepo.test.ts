@@ -253,3 +253,13 @@ describe('writes parse before they are stored (every boundary goes through Zod)'
     expect(rewards).toEqual([])
   })
 })
+
+describe('watchStatus', () => {
+  it('reports an always-online, empty-outbox status synchronously', () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    const seen: unknown[] = []
+    const unsub = repo.watchStatus((s) => seen.push(s))
+    expect(seen).toEqual([expect.objectContaining({ online: true, outboxCount: 0, skippedRows: 0 })])
+    unsub()
+  })
+})
