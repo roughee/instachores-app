@@ -1,0 +1,1 @@
+import{B as e,b as t,f as n,o as r}from"./_plugin-vue_export-helper-DSMVPOe4.js";import{g as i}from"./index-bl1u5Z0z.js";import{t as a}from"./EmptyState-slHMyVc-.js";var o=n({__name:`OverviewScreen`,setup(n){return(n,o)=>(t(),r(a,{icon:e(i),label:`Review the week and month once there is data to show.`},null,8,[`icon`]))}});export{o as default};
