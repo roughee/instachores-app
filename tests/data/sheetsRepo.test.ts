@@ -382,6 +382,36 @@ describe('SheetsRepo: poller backoff', () => {
     }
   })
 
+  it('pollIntervalMs overrides the 30s default, both at rest and after a poll restores it (issue #22)', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, events: [], serverTime: 'x' }))
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+        pollIntervalMs: 1_000,
+      })
+      await repo.init()
+
+      let status: SheetsRepoStatus | undefined
+      repo.watchStatus((s) => (status = s))
+      expect(status?.intervalMs).toBe(1_000)
+
+      repo.start()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      expect(status?.intervalMs).toBe(1_000)
+
+      repo.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('onVisible() and onOnline() poll immediately instead of waiting for the timer', async () => {
     vi.useFakeTimers()
     try {
@@ -580,6 +610,46 @@ describe('SheetsRepo: upsertTask/upsertReward', () => {
 })
 
 describe('SheetsRepo: review fixes', () => {
+  it("start()/stop() work with the default timers even when the environment's setTimeout/clearTimeout are receiver-checked, like a real browser's (issue #22)", () => {
+    // A real browser's `window.setTimeout`/`clearTimeout` throw "Illegal
+    // invocation" when called as a method of some other object (their `this`
+    // must be the global) -- unlike Node's, which tolerate it, so this never
+    // showed up under Vitest's `environment: 'node'` until the e2e suite hit
+    // it in a real Chromium: `SheetsRepo`'s *default* `timers` destructured
+    // `setTimeout`/`clearTimeout` off the global and stored them as plain
+    // object properties, so calling `this.timers.setTimeout(...)` invoked
+    // them detached from the global they need as their receiver.
+    const realSetTimeout = globalThis.setTimeout
+    const realClearTimeout = globalThis.clearTimeout
+    function receiverCheckedSetTimeout(
+      this: unknown,
+      ...args: Parameters<typeof setTimeout>
+    ): ReturnType<typeof setTimeout> {
+      if (this !== globalThis) throw new TypeError('Illegal invocation')
+      return realSetTimeout(...args)
+    }
+    function receiverCheckedClearTimeout(this: unknown, ...args: Parameters<typeof clearTimeout>): void {
+      if (this !== globalThis) throw new TypeError('Illegal invocation')
+      realClearTimeout(...args)
+    }
+    vi.stubGlobal('setTimeout', receiverCheckedSetTimeout)
+    vi.stubGlobal('clearTimeout', receiverCheckedClearTimeout)
+    try {
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: vi.fn(async () => jsonResponse({ ok: true, events: [], serverTime: 'x' })),
+        // No `timers` override: this is exactly the default the constructor builds.
+      })
+      expect(() => repo.start()).not.toThrow()
+      expect(() => repo.stop()).not.toThrow()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('stop() during an in-flight tick prevents the tick from rescheduling itself', async () => {
     vi.useFakeTimers()
     try {
