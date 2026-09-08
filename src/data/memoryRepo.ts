@@ -139,7 +139,8 @@ export class MemoryRepo implements HouseholdRepo {
     return () => set.delete(sub)
   }
 
-  async appendEvent(id: string, e: ChoreEventT): Promise<void> {
+  async appendEvent(id: string, raw: ChoreEventT): Promise<void> {
+    const e = ChoreEvent.parse(raw)
     const s = this.store(id)
     if (s.events.some((row) => rawId(row) === e.id)) return
     s.events.push(e)
@@ -147,7 +148,8 @@ export class MemoryRepo implements HouseholdRepo {
     if (subs) for (const sub of subs) sub.cb(this.readEvents(id, sub.since))
   }
 
-  async upsertTask(id: string, t: TaskT): Promise<void> {
+  async upsertTask(id: string, raw: TaskT): Promise<void> {
+    const t = Task.parse(raw)
     const s = this.store(id)
     const existingRaw = s.tasks.find((row) => rawId(row) === t.id)
     if (existingRaw !== undefined) {
@@ -163,7 +165,8 @@ export class MemoryRepo implements HouseholdRepo {
     this.taskWatchers.get(id)?.forEach((cb) => cb(list))
   }
 
-  async upsertReward(id: string, r: RewardT): Promise<void> {
+  async upsertReward(id: string, raw: RewardT): Promise<void> {
+    const r = Reward.parse(raw)
     const s = this.store(id)
     const existingRaw = s.rewards.find((row) => rawId(row) === r.id)
     if (existingRaw !== undefined) {

@@ -228,3 +228,28 @@ describe('an unseeded household id', () => {
     expect(seen).toHaveLength(2)
   })
 })
+
+describe('writes parse before they are stored (every boundary goes through Zod)', () => {
+  it('appendEvent rejects an event that fails the schema and does not notify watchers', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    const calls: number[] = []
+    repo.watchEvents(HID, new Date(0), (e) => calls.push(e.length))
+    const bad = { ...complete(task()), points: 999 } as unknown as Parameters<MemoryRepo['appendEvent']>[1]
+    await expect(repo.appendEvent(HID, bad)).rejects.toThrow()
+    expect(calls).toEqual([0])
+  })
+
+  it('upsertTask and upsertReward reject rows that fail the schema and leave the store unchanged', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    let tasks: TaskT[] = []
+    let rewards: RewardT[] = []
+    repo.watchTasks(HID, (t) => (tasks = t))
+    repo.watchRewards(HID, (r) => (rewards = r))
+    const badTask = { ...task(), points: 51 } as unknown as TaskT
+    const badReward = { ...reward(), cost: 0 } as unknown as RewardT
+    await expect(repo.upsertTask(HID, badTask)).rejects.toThrow()
+    await expect(repo.upsertReward(HID, badReward)).rejects.toThrow()
+    expect(tasks).toEqual([])
+    expect(rewards).toEqual([])
+  })
+})
