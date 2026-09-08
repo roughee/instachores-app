@@ -145,6 +145,46 @@ describe('SheetsRepo: connect', () => {
     expect(await snapshotStore.get('household')).toBeUndefined()
     expect(await snapshotStore.get('tasks')).toBeUndefined()
   })
+
+  it('names the tab and id of the last row bootstrap dropped for failing to parse, preferring the latest tab (issue #21)', async () => {
+    const rawHousehold = {
+      v: '1',
+      id: HID,
+      name: 'Home',
+      weeklyTarget: '250',
+      tz: 'Europe/Vilnius',
+      createdAt: '2026-09-01T00:00:00.000Z',
+    }
+    const rawMembers = [{ uid: ANA, name: 'Ana', color: '#1f8a70', role: 'adult' }]
+    const badTask = { id: 'task-bad', name: 'Broken' }
+    const badEvent = { id: 'ev-bad', type: 'complete' }
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        household: rawHousehold,
+        members: rawMembers,
+        tasks: [badTask],
+        rewards: [],
+        events: [badEvent],
+        serverTime: '2026-09-09T18:00:00.000Z',
+      }),
+    )
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+
+    let status: SheetsRepoStatus | undefined
+    repo.watchStatus((s) => (status = s))
+    await repo.connect(LINK)
+
+    expect(status?.skippedRows).toBe(2)
+    // Events are parsed after tasks and rewards, so a bad row there wins as "last".
+    expect(status?.lastSkipped).toEqual({ tab: 'events', id: 'ev-bad' })
+  })
 })
 
 describe('SheetsRepo: outbox flush and retry', () => {
@@ -340,6 +380,31 @@ describe('SheetsRepo: polling', () => {
 
     expect(sinceSent[0]).toBeUndefined()
     expect(sinceSent[1]).toBe(eB.loggedAt.toISOString())
+  })
+
+  it('names the tab and id of the last row a poll dropped for failing to parse (issue #21, Settings sync panel)', async () => {
+    const good = complete(task())
+    const bad = { id: 'ev-bad-1', type: 'complete' }
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [good, bad], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+    await repo.init()
+
+    let status: SheetsRepoStatus | undefined
+    repo.watchStatus((s) => (status = s))
+    await repo.sync()
+
+    expect(status?.skippedRows).toBe(1)
+    expect(status?.lastSkipped).toEqual({ tab: 'events', id: 'ev-bad-1' })
   })
 })
 

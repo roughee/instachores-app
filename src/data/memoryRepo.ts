@@ -198,7 +198,15 @@ export class MemoryRepo implements HouseholdRepo {
 
   /** Nothing to sync in memory: always online, never anything pending. */
   watchStatus(cb: (s: RepoStatus) => void): Unsubscribe {
-    cb({ online: true, outboxCount: 0, lastPollAt: undefined, lastError: undefined, skippedRows: 0, intervalMs: 0 })
+    cb({
+      online: true,
+      outboxCount: 0,
+      lastPollAt: undefined,
+      lastError: undefined,
+      skippedRows: 0,
+      lastSkipped: undefined,
+      intervalMs: 0,
+    })
     return () => undefined
   }
 

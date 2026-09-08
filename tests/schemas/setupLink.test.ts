@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeSetupLink, encodeSetupLink, extractSetupLinkToken } from '@/schemas/setupLink'
+import { buildSetupLinkUrl, decodeSetupLink, encodeSetupLink, extractSetupLinkToken } from '@/schemas/setupLink'
 import type { SetupLink } from '@/schemas/setupLink'
 
 describe('extractSetupLinkToken', () => {
@@ -31,5 +31,21 @@ describe('extractSetupLinkToken', () => {
     const token = encodeSetupLink(link)
     const pastedUrl = `https://roughee.github.io/instachores-app/#/welcome?s=${token}`
     expect(decodeSetupLink(extractSetupLinkToken(pastedUrl))).toEqual(link)
+  })
+})
+
+describe('buildSetupLinkUrl', () => {
+  it('builds a welcome URL from the page origin and path, carrying the encoded link as ?s= (issue #21, Settings)', () => {
+    const link: SetupLink = { url: 'https://script.google.com/macros/s/abc/exec', secret: 'x'.repeat(12) }
+    const url = buildSetupLinkUrl(link, 'https://roughee.github.io', '/instachores-app/')
+
+    expect(url).toBe(`https://roughee.github.io/instachores-app/#/welcome?s=${encodeSetupLink(link)}`)
+  })
+
+  it('round-trips: decoding the token built by buildSetupLinkUrl gives back the same link', () => {
+    const link: SetupLink = { url: 'https://script.google.com/macros/s/xyz/exec', secret: 'y'.repeat(12) }
+    const url = buildSetupLinkUrl(link, 'https://roughee.github.io', '/instachores-app/')
+
+    expect(decodeSetupLink(extractSetupLinkToken(url))).toEqual(link)
   })
 })
