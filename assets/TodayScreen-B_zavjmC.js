@@ -1,0 +1,1 @@
+import{f as e,h as t,i as n,l as r,v as i}from"./index-BQuastly.js";import{t as a}from"./EmptyState-hsCd9gWr.js";var o=e({__name:`TodayScreen`,setup(e){return(e,o)=>(t(),r(a,{icon:i(n),label:`See what happened today once someone logs a task.`},null,8,[`icon`]))}});export{o as default};

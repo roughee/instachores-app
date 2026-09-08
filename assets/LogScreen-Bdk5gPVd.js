@@ -1,0 +1,1 @@
+import{f as e,h as t,l as n,n as r,v as i}from"./index-BQuastly.js";import{t as a}from"./EmptyState-hsCd9gWr.js";var o=e({__name:`LogScreen`,setup(e){return(e,o)=>(t(),n(a,{icon:i(r),label:`Log a task in two taps once tasks are loaded.`},null,8,[`icon`]))}});export{o as default};

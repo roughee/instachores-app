@@ -1,0 +1,1 @@
+import{f as e,h as t,l as n,r,v as i}from"./index-BQuastly.js";import{t as a}from"./EmptyState-hsCd9gWr.js";var o=e({__name:`RewardsScreen`,setup(e){return(e,o)=>(t(),n(a,{icon:i(r),label:`Turn points into rest once rewards are set up.`},null,8,[`icon`]))}});export{o as default};
