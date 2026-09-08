@@ -1,0 +1,1 @@
+import{C as e,O as t,P as n,l as r,v as i}from"./index-BMN1U-xu.js";import{t as a}from"./EmptyState-Cn_NrXwZ.js";var o=e({__name:`RewardsScreen`,setup(e){return(e,o)=>(t(),i(a,{icon:n(r),label:`Turn points into rest once rewards are set up.`},null,8,[`icon`]))}});export{o as default};
