@@ -293,6 +293,26 @@ export const useEventsStore = defineStore('events', () => {
   }
 
   /**
+   * "Do all" (DESIGN.md §5 TaskGroup): completes every one of `taskIds`
+   * through `complete`, in order. Each call's local apply and combo
+   * detection run synchronously (Architecture.md §2: the UI never waits on
+   * the network) before that call's own repo write, so calling `complete`
+   * without awaiting it in between -- only collecting its promise -- still
+   * runs every local apply and `detectAndApplyBonuses` in `taskIds` order,
+   * all in this tick: the parent's bonus (if any) lands after the last
+   * sub-item, exactly once (its deterministic id makes a same-day repeat a
+   * no-op for the bonus, though each sub-item still logs again, same as a
+   * second chip tap). `recentlyLogged` ends up pointing at the last
+   * sub-item's complete event, so Undo removes that one. The repo writes
+   * themselves are awaited together at the end, not serialized -- a slow
+   * network must not delay the 2nd sub-item's local apply behind the 1st's.
+   */
+  async function completeMany(taskIds: string[], opts: CompleteOptions = {}): Promise<void> {
+    const pending = taskIds.map((taskId) => complete(taskId, opts))
+    for (const p of pending) await p
+  }
+
+  /**
    * Appends an `undo` referencing `eventId` while its 4 s window (from the
    * local `loggedAt`) is still open. Outside the window, or for an event
    * this phone never logged, this is a no-op that says why.
@@ -343,6 +363,7 @@ export const useEventsStore = defineStore('events', () => {
     bind,
     unbind,
     complete,
+    completeMany,
     undo,
     prevWeek,
     nextWeek,

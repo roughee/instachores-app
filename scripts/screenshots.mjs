@@ -182,3 +182,31 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 19-overview-${scheme}.png`)
 }
+
+// Issue #20: Category screen for a plain category (task buttons and the
+// Hand-wash dishes group, its chips with no completions yet).
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/log/kitchen`, { waitUntil: 'networkidle' })
+  await page.getByText('Hand-wash dishes').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}20-category-kitchen-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 20-category-kitchen-${scheme}.png`)
+}
+
+// Issue #20: Category screen for the Clean bathroom combo group, with a x2
+// badge on the Toilet chip. `?demoComplete=<id>,<id>` (CategoryScreen.vue,
+// gated by `usePwa.ts`'s `hasFlag`/`flagValue`) completes the same sub-item
+// twice on mount so the badge renders without scripting real taps.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoComplete=task-bathroom-toilet,task-bathroom-toilet#/log/bathroom`, {
+    waitUntil: 'networkidle',
+  })
+  await page.getByText('x2').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}20-category-bathroom-x2-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 20-category-bathroom-x2-${scheme}.png`)
+}
