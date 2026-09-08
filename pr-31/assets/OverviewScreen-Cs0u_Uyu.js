@@ -1,0 +1,1 @@
+import{a as e,f as t,h as n,l as r,v as i}from"./index-CbK-N4VG.js";import{t as a}from"./EmptyState-C30_UKin.js";var o=t({__name:`OverviewScreen`,setup(t){return(t,o)=>(n(),r(a,{icon:i(e),label:`Review the week and month once there is data to show.`},null,8,[`icon`]))}});export{o as default};
