@@ -26,4 +26,18 @@ describe('Prefs schema', () => {
   it('rejects an empty lastTab string', () => {
     expect(Prefs.safeParse({ lastTab: '' }).success).toBe(false)
   })
+
+  it('installCardDismissed is undefined by default', () => {
+    const p = Prefs.parse({})
+    expect(p.installCardDismissed).toBeUndefined()
+  })
+
+  it('accepts installCardDismissed true', () => {
+    const p = Prefs.parse({ installCardDismissed: true })
+    expect(p.installCardDismissed).toBe(true)
+  })
+
+  it('rejects a non-boolean installCardDismissed', () => {
+    expect(Prefs.safeParse({ installCardDismissed: 'yes' }).success).toBe(false)
+  })
 })
