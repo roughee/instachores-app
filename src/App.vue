@@ -6,10 +6,13 @@
  * text label (tabs) or a labelled button (FAB), so the accessible name
  * comes from one place, not two competing ones.
  */
+import { computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { PhChartBar, PhClockCounterClockwise, PhCookingPot, PhGift, PhListChecks } from '@phosphor-icons/vue'
 import UpdateToast from '@/components/UpdateToast.vue'
 import { usePwa } from '@/composables/usePwa'
+import { useSessionStore } from '@/stores/session'
+import { useSyncStore } from '@/stores/sync'
 
 interface Tab {
   to: string
@@ -38,13 +41,28 @@ function logKitchenReset(): void {
 }
 
 const { needRefresh, reload } = usePwa()
+
+// Small status strip (issue #16, DESIGN.md §5 AppShell): demo mode is always
+// called out (it never talks to the network), otherwise the dot mirrors the
+// sync store. The full sync panel with outbox detail is issue #21.
+const session = useSessionStore()
+const sync = useSyncStore()
+
+const statusLabel = computed(() => {
+  if (session.mode === 'demo') return 'Demo'
+  if (!sync.online) return 'Offline'
+  if (sync.outboxCount > 0) return 'Syncing'
+  return 'Up to date'
+})
+
+const statusNeedsAttention = computed(() => session.mode === 'demo' || !sync.online || sync.outboxCount > 0)
 </script>
 
 <template>
   <div class="app-shell">
     <header class="app-shell__status" role="status">
-      <span class="app-shell__status-dot"></span>
-      <span>Up to date</span>
+      <span class="app-shell__status-dot" :class="{ 'app-shell__status-dot--warn': statusNeedsAttention }"></span>
+      <span>{{ statusLabel }}</span>
     </header>
 
     <main class="app-shell__content">
@@ -109,6 +127,10 @@ const { needRefresh, reload } = usePwa()
   height: 8px;
   border-radius: var(--radius-chip);
   background: var(--success);
+}
+
+.app-shell__status-dot--warn {
+  background: var(--warn);
 }
 
 .app-shell__content {

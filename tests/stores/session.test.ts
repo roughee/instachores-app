@@ -124,6 +124,76 @@ describe('sessionStore.resume', () => {
   })
 })
 
+describe('sessionStore.preview', () => {
+  it('returns the household from the injected factory without binding or persisting anything', async () => {
+    const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    const storage = fakeStorage()
+    const setItem = vi.spyOn(storage, 'setItem')
+    configureSession({ storage, createSheetsRepo: () => repo, createDemoRepo: unusedDemo })
+    const session = useSessionStore()
+
+    const result = await session.preview(LINK)
+
+    expect(result.id).toBe(HID)
+    expect(Object.keys(result.members)).toEqual(expect.arrayContaining([ANA, BEN]))
+    expect(session.mode).toBe('disconnected')
+    expect(session.repo).toBeNull()
+    expect(session.householdId).toBeNull()
+    expect(useHouseholdStore().household).toBeUndefined()
+    expect(setItem).not.toHaveBeenCalled()
+  })
+
+  it('propagates a connect() failure, such as a wrong secret, without binding anything', async () => {
+    class FailingRepo extends FakeSheetsRepo {
+      override async connect(): Promise<never> {
+        throw new RepoError('unauthorized', 'bad secret')
+      }
+    }
+    const repo = new FailingRepo([{ id: HID, household: household() }])
+    configureSession({ storage: fakeStorage(), createSheetsRepo: () => repo, createDemoRepo: unusedDemo })
+
+    await expect(useSessionStore().preview(LINK)).rejects.toBeInstanceOf(RepoError)
+    expect(useSessionStore().mode).toBe('disconnected')
+    expect(useSessionStore().repo).toBeNull()
+  })
+})
+
+describe('sessionStore.ready', () => {
+  it('resolves once resume() settles, even when nothing was stored', async () => {
+    configureSession({ storage: fakeStorage(), createSheetsRepo: unusedDemo, createDemoRepo: unusedDemo })
+    const session = useSessionStore()
+    await session.resume()
+    await expect(session.ready).resolves.toBeUndefined()
+  })
+
+  it('does not resolve until resume() finishes awaiting the repo, so the router guard never flashes Welcome', async () => {
+    const order: string[] = []
+    class SlowRepo extends FakeSheetsRepo {
+      // `init` is an instance field on FakeSheetsRepo (a `vi.fn()` assigned in
+      // its constructor), not a prototype method, so overriding it as a field
+      // here -- not a method -- is what actually shadows it.
+      override readonly init = vi.fn(async (): Promise<undefined> => {
+        order.push('init-start')
+        await Promise.resolve()
+        order.push('init-end')
+        return undefined
+      })
+    }
+    const repo = new SlowRepo([{ id: HID, household: household() }])
+    const stored = Session.parse({ v: 1, link: LINK, householdId: HID, memberUid: ANA })
+    const storage = fakeStorage({ [SESSION_STORAGE_KEY]: JSON.stringify(stored) })
+    configureSession({ storage, createSheetsRepo: () => repo, createDemoRepo: unusedDemo })
+    const session = useSessionStore()
+
+    void session.ready.then(() => order.push('ready'))
+
+    await session.resume()
+    await session.ready
+
+    expect(order).toEqual(['init-start', 'init-end', 'ready'])
+  })
+})
+
 describe('sessionStore.disconnect', () => {
   it('stops the poller, unbinds every store and clears the stored session', async () => {
     const repo = new FakeSheetsRepo([{ id: HID, household: household() }])

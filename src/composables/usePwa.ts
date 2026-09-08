@@ -37,7 +37,10 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-function hasFlag(name: string): boolean {
+/** Reads a boolean query flag off the current URL. Exported so other
+ * dev-only, screenshot-forcing flags (WelcomeScreen's `forceLinkError`) can
+ * share the same check rather than re-reading `window.location` themselves. */
+export function hasFlag(name: string): boolean {
   return new URLSearchParams(window.location.search).get(name) !== null
 }
 
