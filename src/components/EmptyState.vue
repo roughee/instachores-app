@@ -2,18 +2,22 @@
 import type { Component } from 'vue'
 
 /**
- * Icon + one sentence + an optional action (DESIGN.md §5 EmptyState: "never
- * a blank screen"). The icon is decorative here: the sentence already
- * carries the meaning, so the icon is hidden from assistive tech rather
- * than doubling it up with a redundant aria-label. The default slot is
- * empty for every screen that has no action yet; a caller that needs one
- * (issue #20's Category screen) puts its own link or button there so this
- * component stays free of route and click-handler assumptions.
+ * Icon + one sentence, with an optional one action (DESIGN.md §5 EmptyState:
+ * "icon + one sentence + one action. Never a blank screen."). The icon is
+ * decorative here: the sentence already carries the meaning, so the icon is
+ * hidden from assistive tech rather than doubling it up with a redundant
+ * aria-label. The action is either `actionLabel` + the `action` emit (a plain
+ * button, issue #18) or the default slot for a caller that brings its own
+ * link (issue #20's Category screen); both are optional so screens that only
+ * have the placeholder sentence keep working unchanged.
  */
 defineProps<{
   icon: Component
   label: string
+  actionLabel?: string
 }>()
+
+const emit = defineEmits<{ action: [] }>()
 </script>
 
 <template>
@@ -22,6 +26,9 @@ defineProps<{
       <component :is="icon" :size="32" weight="regular" aria-hidden="true" />
     </span>
     <p class="empty-state__label">{{ label }}</p>
+    <button v-if="actionLabel" type="button" class="empty-state__action" @click="emit('action')">
+      {{ actionLabel }}
+    </button>
     <slot />
   </div>
 </template>
@@ -53,5 +60,21 @@ defineProps<{
   max-width: 32ch;
   color: var(--text-2);
   font-size: var(--fs-md);
+}
+
+.empty-state__action {
+  min-height: var(--touch);
+  padding: 0 calc(var(--gutter) * 1.5);
+  border: none;
+  border-radius: var(--radius-button);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  transition: transform var(--dur-press) ease-out;
+}
+
+.empty-state__action:active {
+  transform: scale(0.97);
 }
 </style>

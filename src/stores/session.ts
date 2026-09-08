@@ -69,11 +69,11 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * "Try the demo" (Plan §5.5 Welcome): a seeded `MemoryRepo`, first adult as
-   * the member, never touches storage. Also marks `ready` (issue #20): the
-   * router guard's very first navigation awaits it before deciding whether
-   * to redirect, and a deep link straight into demo mode (`main.ts`'s
-   * `?demo=1#/log/...`) calls this instead of `resume()`, so without this
-   * that first navigation would await `ready` forever.
+   * the member, never touches storage. Also resolves `ready` (issue #18):
+   * without this, a page that boots straight into demo mode (a `?demo=1`
+   * link, say) rather than through `resume()` first would leave the router
+   * guard's `await session.ready` pending forever, so no route -- Welcome
+   * included -- ever renders.
    */
   async function startDemo(now?: Date): Promise<void> {
     try {
@@ -112,6 +112,7 @@ export const useSessionStore = defineStore('session', () => {
     bindRepo(sheetsRepo, household.id)
     memberUid.value = uid
     mode.value = 'sheets'
+    markReady()
     const session = Session.parse({ v: 1, link, householdId: household.id, memberUid: uid })
     opts.storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
     sheetsRepo.start()

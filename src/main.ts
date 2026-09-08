@@ -41,7 +41,9 @@ app.mount('#app')
  * the first N quick-row tasks, and `?forceOffline=1` (with `?demoOutbox=N`)
  * fakes the sync store's status so the offline banner renders without a
  * real dropped connection (`MemoryRepo` has no network to lose). Harmless
- * in production: nobody links to the app with these params.
+ * in production: nobody links to the app with these params. Issue #18's
+ * Today screen reuses `demoLogs` as-is: any completed quick-row task shows
+ * up there too.
  *
  * Issue #16 adds the router guard for a missing session; absent `?demo=1`
  * this only resumes a session that already exists, so a refresh does not

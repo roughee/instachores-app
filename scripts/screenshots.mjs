@@ -141,6 +141,48 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   console.log(`saved 16-welcome-error-${scheme}.png`)
 }
 
+// Issue #18: Today screen, grouped by hour. Reuses main.ts's `demo=1` /
+// `demoLogs=N` flags (issue #17) as-is: `demoLogs=3` completes three
+// quick-row tasks, which show up here too since Today reads the same
+// events the household bar does.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    colorScheme: scheme,
+  })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3#/today`, { waitUntil: 'networkidle' })
+  await page.locator('.today-row').first().waitFor()
+  await page.screenshot({ path: `${OUT_DIR}18-today-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 18-today-${scheme}.png`)
+}
+
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    colorScheme: scheme,
+  })
+  await page.goto(`${BASE_URL}?demo=1#/today`, { waitUntil: 'networkidle' })
+  await page.getByText('Quiet so far').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}18-today-empty-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 18-today-empty-${scheme}.png`)
+}
+
+// Issue #19: the week overview with a few demo logs, so the member split and
+// the split bars have data (household bar shared with the Log screen).
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3#/overview`, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Previous week' }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}19-overview-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 19-overview-${scheme}.png`)
+}
+
 // Issue #20: Category screen for a plain category (task buttons and the
 // Hand-wash dishes group, its chips with no completions yet).
 for (const scheme of /** @type {const} */ (['light', 'dark'])) {

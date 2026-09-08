@@ -159,19 +159,6 @@ describe('sessionStore.preview', () => {
 })
 
 describe('sessionStore.ready', () => {
-  it('resolves once startDemo() settles too, not only resume() -- a deep link straight into demo mode (main.ts’s ?demo=1) never calls resume()', async () => {
-    const demoRepo = new FakeSheetsRepo([{ id: HID, household: household() }])
-    configureSession({
-      storage: fakeStorage(),
-      createSheetsRepo: unusedDemo,
-      createDemoRepo: () => demoRepo,
-      now: () => NOW,
-    })
-    const session = useSessionStore()
-    await session.startDemo(NOW)
-    await expect(session.ready).resolves.toBeUndefined()
-  })
-
   it('resolves once resume() settles, even when nothing was stored', async () => {
     configureSession({ storage: fakeStorage(), createSheetsRepo: unusedDemo, createDemoRepo: unusedDemo })
     const session = useSessionStore()
@@ -204,6 +191,23 @@ describe('sessionStore.ready', () => {
     await session.ready
 
     expect(order).toEqual(['init-start', 'init-end', 'ready'])
+  })
+})
+
+describe('sessionStore.ready and startDemo (#18)', () => {
+  it('startDemo also resolves ready, so a fresh boot straight into demo mode does not hang the router guard forever', async () => {
+    const demoRepo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    configureSession({
+      storage: fakeStorage(),
+      createSheetsRepo: unusedDemo,
+      createDemoRepo: () => demoRepo,
+      now: () => NOW,
+    })
+    const session = useSessionStore()
+
+    await session.startDemo(NOW)
+
+    await expect(session.ready).resolves.toBeUndefined()
   })
 })
 

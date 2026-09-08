@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRepo } from '@/data/memoryRepo'
 import { deriveState } from '@/domain/derive'
 import { SEED_IDS } from '@/domain/seed'
-import { DAY_MS } from '@/domain/time'
+import { completes, liveEvents } from '@/domain/events'
+import { DAY_MS, dayKey, startOfWeek } from '@/domain/time'
 import { ChoreEvent } from '@/schemas'
 import { configureSession, useSessionStore } from '@/stores/session'
 import { useCatalogStore } from '@/stores/catalog'
@@ -415,6 +416,69 @@ describe('eventsStore.completeMany', () => {
   })
 })
 
+describe('eventsStore.todayRows / todayTotals (#18)', () => {
+  it('exposes today’s completes newest-first, with an undone row struck through and excluded from totals', async () => {
+    const pots = task({ id: 'task-pots', points: 4 })
+    const laundry = task({ id: 'task-fold', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots, laundry] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const potsEvent = eventsStore.events.find((e) => e.type === 'complete')!
+
+    clock = new Date(NOW.getTime() + 1000)
+    eventsStore.undo(potsEvent.id)
+
+    clock = new Date(NOW.getTime() + 60_000)
+    await eventsStore.complete('task-fold', { forUid: BEN })
+
+    expect(eventsStore.todayRows.map((r) => r.taskId)).toEqual(['task-fold', 'task-pots'])
+    const potsRow = eventsStore.todayRows.find((r) => r.taskId === 'task-pots')!
+    expect(potsRow.undone).toBe(true)
+    expect(eventsStore.todayTotals.household).toBe(3)
+    expect(eventsStore.todayTotals.byMember[ANA]).toBeUndefined()
+    expect(eventsStore.todayTotals.byMember[BEN]).toBe(3)
+  })
+
+  it('groups by the household timezone’s hour, not UTC (Vilnius fixture)', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots') // NOW is 21:00 Vilnius
+
+    expect(eventsStore.todayRows[0]!.hourKey).toBe('21')
+  })
+
+  it('todayTotals.household equals the sum of today’s live complete points from the domain layer, not re-derived here', async () => {
+    const pots = task({ id: 'task-pots', points: 4 })
+    const laundry = task({ id: 'task-fold', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots, laundry] }])
+    const { eventsStore, householdStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    clock = new Date(NOW.getTime() + 60_000)
+    await eventsStore.complete('task-fold', { forUid: BEN })
+
+    const tz = householdStore.household!.tz
+    const today = dayKey(clock, tz)
+    const expected = completes(liveEvents(eventsStore.events))
+      .filter((e) => dayKey(e.at, tz) === today)
+      .reduce((sum, e) => sum + e.points, 0)
+
+    expect(eventsStore.todayTotals.household).toBe(expected)
+  })
+
+  it('is empty before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.todayRows).toEqual([])
+    expect(eventsStore.todayTotals).toEqual({ household: 0, byMember: {} })
+  })
+})
+
 describe('editing a task does not rewrite history', () => {
   it('updateTaskPoints through the catalog store leaves an already-logged complete event’s points unchanged', async () => {
     const pots = task({ id: 'task-pots', points: 2 })
@@ -431,5 +495,54 @@ describe('editing a task does not rewrite history', () => {
     const after = eventsStore.events.find((e): e is typeof before => e.id === before.id && e.type === 'complete')!
     expect(after.points).toBe(2)
     expect(eventsStore.derived.balances[ANA]).toBe(2)
+  })
+})
+
+describe('eventsStore.weekRollup / week navigation (issue #19)', () => {
+  it('defaults to the current week, pro-rated to now', () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    const { eventsStore } = bindAll(repo)
+
+    expect(eventsStore.weekOffset).toBe(0)
+    // NOW is Wednesday (fixtures.ts): 3 days into the week.
+    expect(eventsStore.weekRollup.elapsedDays).toBe(3)
+    expect(eventsStore.weekRollup.start.toISOString()).toBe(startOfWeek(NOW, TZ).toISOString())
+  })
+
+  it('prevWeek steps back and shows that week’s events; nextWeek never passes the current week', async () => {
+    const pots = task({ id: 'task-pots', points: 3 })
+    const weekStart = startOfWeek(NOW, TZ)
+    const lastWeekStart = startOfWeek(new Date(weekStart.getTime() - DAY_MS), TZ)
+    const lastWeekEvent = ChoreEvent.parse({
+      v: 1,
+      id: 'ev-last-week',
+      type: 'complete',
+      actorUid: ANA,
+      at: new Date(lastWeekStart.getTime() + DAY_MS),
+      loggedAt: new Date(lastWeekStart.getTime() + DAY_MS),
+      taskId: 'task-pots',
+      forUid: ANA,
+      points: 3,
+    })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots], events: [lastWeekEvent] }])
+    const { eventsStore } = bindAll(repo)
+
+    expect(eventsStore.weekRollup.household).toBe(0)
+
+    eventsStore.prevWeek()
+    expect(eventsStore.weekOffset).toBe(-1)
+    expect(eventsStore.weekRollup.household).toBe(3)
+
+    eventsStore.nextWeek()
+    eventsStore.nextWeek()
+    expect(eventsStore.weekOffset).toBe(0)
+    expect(eventsStore.weekRollup.household).toBe(0)
+  })
+
+  it('is a safe all-zero shape before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.weekRollup.household).toBe(0)
+    expect(eventsStore.weekRollup.target).toBe(0)
+    expect(eventsStore.weekRollup.byCategory).toEqual({})
   })
 })

@@ -12,10 +12,12 @@ import { computed, ref } from 'vue'
 import type { HouseholdRepo, Unsubscribe } from '@/data/repo'
 import { mergeEvents } from '@/data/merge'
 import { detectCombos } from '@/domain/combos'
-import { deriveState } from '@/domain/derive'
-import type { Derived } from '@/domain/derive'
+import { deriveState, rollupForWeek } from '@/domain/derive'
+import type { Derived, WeekRollup } from '@/domain/derive'
 import { liveEvents } from '@/domain/events'
-import { DAY_MS, dayKey, startOfMonth } from '@/domain/time'
+import { buildToday } from '@/domain/today'
+import type { TodayRow, TodayTotals } from '@/domain/today'
+import { DAY_MS, dayKey, localMidnight, shiftDay, startOfMonth, startOfWeek } from '@/domain/time'
 import { Category, ChoreEvent } from '@/schemas'
 import type { ChoreEvent as ChoreEventT, EventOf } from '@/schemas'
 import { useCatalogStore } from './catalog'
@@ -37,6 +39,8 @@ export interface CompleteOptions {
 }
 
 export type UndoResult = { ok: true } | { ok: false; reason: string }
+
+export type { TodayRow, TodayTotals } from '@/domain/today'
 
 function emptyDerived(): Derived {
   const dueDots = Object.fromEntries(Category.options.map((c) => [c, false])) as Record<Category, boolean>
@@ -60,6 +64,21 @@ function startOfPreviousMonth(now: Date, tz: string): Date {
   return startOfMonth(new Date(thisMonth.getTime() - DAY_MS), tz)
 }
 
+/** A safe all-zero `WeekRollup` for before a household has loaded (Overview screen, issue #19). */
+function emptyWeekRollup(now: Date): WeekRollup {
+  return {
+    household: 0,
+    target: 0,
+    byMember: {},
+    byCategory: {},
+    combos: [],
+    start: now,
+    end: now,
+    elapsedDays: 1,
+    proRatedTarget: 0,
+  }
+}
+
 export const useEventsStore = defineStore('events', () => {
   const events = ref<ChoreEventT[]>([])
   /** A coarse "now" the app ticks once a minute (bound below) so week/month
@@ -67,6 +86,8 @@ export const useEventsStore = defineStore('events', () => {
    * fine-grained injected clock directly instead, for the 4 s undo window. */
   const clockNow = ref<Date>(new Date(0))
   const recentlyLogged = ref<RecentlyLogged | undefined>(undefined)
+  /** Overview screen (issue #19): 0 = this week, -1 = previous, ... Never > 0. */
+  const weekOffset = ref(0)
 
   let boundRepo: HouseholdRepo | undefined
   let boundHouseholdId: string | undefined
@@ -98,6 +119,7 @@ export const useEventsStore = defineStore('events', () => {
     boundHouseholdId = undefined
     recentlyLogged.value = undefined
     events.value = []
+    weekOffset.value = 0
   }
 
   /** The single source of truth for every number on screen (Architecture.md §2): the domain's output, not re-derived here. */
@@ -114,6 +136,36 @@ export const useEventsStore = defineStore('events', () => {
     })
   })
 
+  /** The Overview screen's week (issue #19, Plan §5.5): `deriveState`'s week
+   * assumes "now", so this calls `rollupForWeek` directly with `weekStart`
+   * shifted by `weekOffset` whole weeks, in the household's own zone. */
+  const weekRollup = computed<WeekRollup>(() => {
+    const householdStore = useHouseholdStore()
+    if (!householdStore.household) return emptyWeekRollup(clockNow.value)
+    const tz = householdStore.household.tz
+    const thisWeekStart = startOfWeek(clockNow.value, tz)
+    const shiftedKey = shiftDay(dayKey(thisWeekStart, tz), 7 * weekOffset.value)
+    const [year, month, day] = shiftedKey.split('-').map(Number) as [number, number, number]
+    const weekStart = localMidnight(year, month, day, tz)
+    const catalogStore = useCatalogStore()
+    return rollupForWeek({
+      events: events.value,
+      tasks: catalogStore.tasks,
+      household: householdStore.household,
+      weekStart,
+      now: clockNow.value,
+    })
+  })
+
+  /** Steps to the previous week; there is no floor. */
+  function prevWeek(): void {
+    weekOffset.value -= 1
+  }
+
+  /** Steps toward the current week; never goes past it (offset 0). */
+  function nextWeek(): void {
+    weekOffset.value = Math.min(0, weekOffset.value + 1)
+  }
   /** "You today" (Plan §5.5 Log): today's complete points credited to the
    * current member, adult tasks only (a kid task's points go to `stars`,
    * not this member's own point total). */
@@ -156,6 +208,25 @@ export const useEventsStore = defineStore('events', () => {
   function applyLocal(e: ChoreEventT): void {
     events.value = mergeEvents(events.value, [e])
   }
+
+  /** The Today screen's feed (Plan §5.5 `#/today`): `buildToday`'s output over
+   * the current events/tasks/household/now, the same domain-first shape as
+   * `derived` above, so the two screens can never disagree on a total. */
+  const today = computed(() => {
+    const householdStore = useHouseholdStore()
+    const catalogStore = useCatalogStore()
+    if (!householdStore.household)
+      return { rows: [] as TodayRow[], totals: { household: 0, byMember: {} } as TodayTotals }
+    return buildToday({
+      events: events.value,
+      tasks: catalogStore.tasks,
+      household: householdStore.household,
+      now: clockNow.value,
+    })
+  })
+
+  const todayRows = computed<TodayRow[]>(() => today.value.rows)
+  const todayTotals = computed<TodayTotals>(() => today.value.totals)
 
   /** Runs combo detection for `day` against the events applied so far and applies any new bonus locally. */
   function detectAndApplyBonuses(day: string, actorUid: string, at: Date): EventOf<'bonus'>[] {
@@ -279,5 +350,22 @@ export const useEventsStore = defineStore('events', () => {
     return { ok: true }
   }
 
-  return { events, recentlyLogged, derived, youToday, doneTodayByTask, bind, unbind, complete, completeMany, undo }
+  return {
+    events,
+    recentlyLogged,
+    derived,
+    youToday,
+    doneTodayByTask,
+    todayRows,
+    todayTotals,
+    weekOffset,
+    weekRollup,
+    bind,
+    unbind,
+    complete,
+    completeMany,
+    undo,
+    prevWeek,
+    nextWeek,
+  }
 })
