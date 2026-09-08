@@ -111,5 +111,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Node scripts (screenshots, tooling).
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', URL: 'readonly', setTimeout: 'readonly' },
+    },
+  },
   configPrettier,
 )

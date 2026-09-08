@@ -1,0 +1,12 @@
+/**
+ * Self-hosted fonts (DESIGN.md §4): Inter for body, Inter Tight for
+ * headings and numbers (tabular figures, so points align). No Google
+ * Fonts <link>; both ship as local woff2 via @fontsource-variable.
+ */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/inter-tight';
+
+:root {
+  --font-body: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Inter Tight Variable', 'Inter Variable', system-ui, -apple-system, sans-serif;
+}
