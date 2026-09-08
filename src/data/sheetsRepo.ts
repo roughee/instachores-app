@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { mergeEvents, nextCursor } from './merge'
 import type { Outbox } from './outbox'
 import { RepoError } from './repo'
-import type { HouseholdRepo, RepoLog, RepoStatus, SyncResult, Unsubscribe } from './repo'
+import type { HouseholdRepo, RepoLog, RepoStatus, SkippedRow, SyncResult, Unsubscribe } from './repo'
 import { postAction } from './sheetsClient'
 import type { Snapshot, SnapshotData } from './snapshot'
 
@@ -103,23 +103,32 @@ function rawId(row: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Parses one tab's raw rows against `schema`. `tab` names the Apps Script
+ * tab (Architecture §4: `tasks`, `rewards`, `events`) both in the log and in
+ * the returned `lastSkipped`, which the Sync panel shows (issue #21, Plan
+ * §5.5 Settings) so a hand-edit typo in the sheet is easy to find.
+ */
 function parseRows<T>(
   schema: z.ZodType<T>,
   rows: unknown[],
-  kind: string,
+  tab: string,
   log: RepoLog,
-): { items: T[]; skipped: number } {
+): { items: T[]; skipped: number; lastSkipped?: SkippedRow } {
   const items: T[] = []
   let skipped = 0
+  let lastSkipped: SkippedRow | undefined
   for (const row of rows) {
     const r = schema.safeParse(row)
     if (r.success) items.push(r.data)
     else {
       skipped++
-      log(`SheetsRepo: skipped a bad ${kind} row`, { id: rawId(row), error: r.error })
+      const id = rawId(row) ?? 'unknown'
+      lastSkipped = { tab, id }
+      log(`SheetsRepo: skipped a bad row in ${tab}`, { id, error: r.error })
     }
   }
-  return { items, skipped }
+  return { items, skipped, ...(lastSkipped !== undefined && { lastSkipped }) }
 }
 
 /** Builds `{ uid: memberRow }` from the members tab's raw rows, keyed by each row's own `uid` cell. */
@@ -194,6 +203,7 @@ export class SheetsRepo implements HouseholdRepo {
       lastPollAt: undefined,
       lastError: undefined,
       skippedRows: 0,
+      lastSkipped: undefined,
       intervalMs: this.pollIntervalMs,
     }
   }
@@ -352,9 +362,9 @@ export class SheetsRepo implements HouseholdRepo {
     })
 
     const household = Household.parse({ ...(res.household as object), members: buildMembersRecord(res.members) })
-    const tasks = parseRows(Task, res.tasks, 'task', this.log)
-    const rewards = parseRows(Reward, res.rewards, 'reward', this.log)
-    const events = parseRows(ChoreEvent, res.events, 'event', this.log)
+    const tasks = parseRows(Task, res.tasks, 'tasks', this.log)
+    const rewards = parseRows(Reward, res.rewards, 'rewards', this.log)
+    const events = parseRows(ChoreEvent, res.events, 'events', this.log)
 
     const cursor = nextCursor(undefined, events.items)
     this.link = link
@@ -366,9 +376,12 @@ export class SheetsRepo implements HouseholdRepo {
       ...(cursor !== undefined && { cursor }),
     }
     this.initPromise = Promise.resolve()
+    // Events are parsed after tasks and rewards, so a bad row there is the "latest" for lastSkipped.
+    const lastSkipped = events.lastSkipped ?? rewards.lastSkipped ?? tasks.lastSkipped
     this.status = {
       ...this.status,
       skippedRows: this.status.skippedRows + tasks.skipped + rewards.skipped + events.skipped,
+      ...(lastSkipped !== undefined && { lastSkipped }),
     }
     await this.persist()
     this.notifyHousehold()
@@ -450,7 +463,7 @@ export class SheetsRepo implements HouseholdRepo {
         params,
       )
       const rows = Array.isArray(res.events) ? res.events : []
-      const { items, skipped } = parseRows(ChoreEvent, rows, 'event', this.log)
+      const { items, skipped, lastSkipped } = parseRows(ChoreEvent, rows, 'events', this.log)
       this.state.events = mergeEvents(this.state.events, items)
       const cursor = nextCursor(this.state.cursor, items)
       this.state = { ...this.state, ...(cursor !== undefined && { cursor }) }
@@ -460,6 +473,7 @@ export class SheetsRepo implements HouseholdRepo {
         online: true,
         lastPollAt: this.now(),
         skippedRows: this.status.skippedRows + skipped,
+        ...(lastSkipped !== undefined && { lastSkipped }),
       }
       if (items.length > 0 || skipped > 0) this.notifyEvents()
       return { pulled: items.length }

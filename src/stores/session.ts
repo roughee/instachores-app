@@ -36,6 +36,12 @@ export const useSessionStore = defineStore('session', () => {
   const householdId = ref<string | null>(null)
   const memberUid = ref<string | null>(null)
   const mode = ref<SessionMode>('disconnected')
+  /** The setup link this phone is connected with (issue #21, Plan §5.5
+   * Settings): lets the Settings screen rebuild the shareable URL without
+   * re-reading storage. `null` while disconnected or only previewing.
+   * Named `linkRef` internally because `connect()`'s own `link` parameter
+   * would otherwise shadow it. */
+  const linkRef = ref<SetupLinkT | null>(null)
 
   /** Resolves once `resume()` has settled, whatever the outcome (issue #16,
    * Architecture.md §7). The router guard awaits this before deciding
@@ -85,6 +91,7 @@ export const useSessionStore = defineStore('session', () => {
       bindRepo(demo, household.id)
       memberUid.value = firstAdult.uid
       mode.value = 'demo'
+      linkRef.value = DEMO_LINK
     } finally {
       markReady()
     }
@@ -112,6 +119,7 @@ export const useSessionStore = defineStore('session', () => {
     bindRepo(sheetsRepo, household.id)
     memberUid.value = uid
     mode.value = 'sheets'
+    linkRef.value = link
     markReady()
     const session = Session.parse({ v: 1, link, householdId: household.id, memberUid: uid })
     opts.storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
@@ -135,6 +143,7 @@ export const useSessionStore = defineStore('session', () => {
       bindRepo(sheetsRepo, parsed.householdId)
       memberUid.value = parsed.memberUid
       mode.value = 'sheets'
+      linkRef.value = parsed.link
       sheetsRepo.start()
       return true
     } finally {
@@ -149,8 +158,21 @@ export const useSessionStore = defineStore('session', () => {
     unbindRepo()
     memberUid.value = null
     mode.value = 'disconnected'
+    linkRef.value = null
     opts.storage.removeItem(SESSION_STORAGE_KEY)
   }
 
-  return { repo, householdId, memberUid, mode, ready, startDemo, preview, connect, resume, disconnect }
+  return {
+    repo,
+    householdId,
+    memberUid,
+    mode,
+    link: linkRef,
+    ready,
+    startDemo,
+    preview,
+    connect,
+    resume,
+    disconnect,
+  }
 })

@@ -6,8 +6,10 @@ import type { Component } from 'vue'
  * "icon + one sentence + one action. Never a blank screen."). The icon is
  * decorative here: the sentence already carries the meaning, so the icon is
  * hidden from assistive tech rather than doubling it up with a redundant
- * aria-label. `actionLabel` is optional so the several screens that only
- * have the placeholder sentence so far (issue #15) keep working unchanged.
+ * aria-label. The action is either `actionLabel` + the `action` emit (a plain
+ * button, issue #18) or the default slot for a caller that brings its own
+ * link (issue #20's Category screen); both are optional so screens that only
+ * have the placeholder sentence keep working unchanged.
  */
 defineProps<{
   icon: Component
@@ -27,6 +29,7 @@ const emit = defineEmits<{ action: [] }>()
     <button v-if="actionLabel" type="button" class="empty-state__action" @click="emit('action')">
       {{ actionLabel }}
     </button>
+    <slot />
   </div>
 </template>
 

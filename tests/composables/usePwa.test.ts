@@ -12,8 +12,39 @@ vi.mock('virtual:pwa-register/vue', () => ({
   useRegisterSW: vi.fn(() => registerSW),
 }))
 
-import { installCardVisible, isStandaloneDisplay, readPollIntervalMs, usePwa } from '@/composables/usePwa'
+import {
+  flagValue,
+  hasFlag,
+  installCardVisible,
+  isStandaloneDisplay,
+  readPollIntervalMs,
+  usePwa,
+} from '@/composables/usePwa'
 import { withSetup } from '../helpers/withSetup'
+
+describe('hasFlag / flagValue', () => {
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('hasFlag is false when the query flag is absent', () => {
+    expect(hasFlag('demoComplete')).toBe(false)
+  })
+
+  it('hasFlag is true once the query flag is present, even with no value', () => {
+    window.history.replaceState({}, '', '/?demoComplete')
+    expect(hasFlag('demoComplete')).toBe(true)
+  })
+
+  it('flagValue returns null when the query flag is absent', () => {
+    expect(flagValue('demoComplete')).toBeNull()
+  })
+
+  it('flagValue returns the raw query value', () => {
+    window.history.replaceState({}, '', '/?demoComplete=task-a,task-b')
+    expect(flagValue('demoComplete')).toBe('task-a,task-b')
+  })
+})
 
 describe('installCardVisible (pure)', () => {
   it('is visible when not standalone, a prompt is captured, and not dismissed', () => {
