@@ -330,6 +330,91 @@ describe('combo detection after complete', () => {
   })
 })
 
+describe('eventsStore.completeMany', () => {
+  function bathroomGroup() {
+    return [
+      task({ id: SEED_IDS.cleanBathroom, name: 'Clean bathroom', category: 'bathroom', points: 0, comboBonus: 2 }),
+      task({
+        id: SEED_IDS.toilet,
+        name: 'Toilet',
+        category: 'bathroom',
+        points: 4,
+        parentId: SEED_IDS.cleanBathroom,
+      }),
+      task({
+        id: SEED_IDS.bathSink,
+        name: 'Sink + mirror + counter',
+        category: 'bathroom',
+        points: 2,
+        parentId: SEED_IDS.cleanBathroom,
+      }),
+      task({
+        id: SEED_IDS.shower,
+        name: 'Shower / tub',
+        category: 'bathroom',
+        points: 4,
+        parentId: SEED_IDS.cleanBathroom,
+      }),
+      task({
+        id: SEED_IDS.drain,
+        name: 'Clear shower drain',
+        category: 'bathroom',
+        points: 4,
+        parentId: SEED_IDS.cleanBathroom,
+      }),
+    ]
+  }
+
+  it('completes every sub-item in order, then appends exactly one bonus with the deterministic combo id', async () => {
+    const tasks = bathroomGroup()
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.completeMany([SEED_IDS.toilet, SEED_IDS.bathSink, SEED_IDS.shower, SEED_IDS.drain])
+
+    const completes = eventsStore.events.filter((e) => e.type === 'complete')
+    expect(completes.map((e) => e.taskId)).toEqual([
+      SEED_IDS.toilet,
+      SEED_IDS.bathSink,
+      SEED_IDS.shower,
+      SEED_IDS.drain,
+    ])
+
+    const bonuses = eventsStore.events.filter((e) => e.type === 'bonus')
+    expect(bonuses).toHaveLength(1)
+    expect(bonuses[0]?.combo).toBe(SEED_IDS.cleanBathroom)
+    expect(bonuses[0]?.points).toBe(2)
+  })
+
+  it('points recentlyLogged at the last complete, not the bonus, so Undo removes the last sub-item', async () => {
+    const tasks = bathroomGroup()
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.completeMany([SEED_IDS.toilet, SEED_IDS.bathSink, SEED_IDS.shower, SEED_IDS.drain])
+
+    const lastComplete = eventsStore.events.filter((e) => e.type === 'complete').at(-1)!
+    expect(eventsStore.recentlyLogged?.eventId).toBe(lastComplete.id)
+  })
+
+  it('running completeMany a second time does not append a second bonus', async () => {
+    const tasks = bathroomGroup()
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.completeMany([SEED_IDS.toilet, SEED_IDS.bathSink, SEED_IDS.shower, SEED_IDS.drain])
+    await eventsStore.completeMany([SEED_IDS.toilet, SEED_IDS.bathSink, SEED_IDS.shower, SEED_IDS.drain])
+
+    const bonuses = eventsStore.events.filter((e) => e.type === 'bonus')
+    expect(bonuses).toHaveLength(1)
+    const completes = eventsStore.events.filter((e) => e.type === 'complete')
+    expect(completes).toHaveLength(8)
+  })
+})
+
 describe('editing a task does not rewrite history', () => {
   it('updateTaskPoints through the catalog store leaves an already-logged complete event’s points unchanged', async () => {
     const pots = task({ id: 'task-pots', points: 2 })

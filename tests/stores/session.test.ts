@@ -159,6 +159,19 @@ describe('sessionStore.preview', () => {
 })
 
 describe('sessionStore.ready', () => {
+  it('resolves once startDemo() settles too, not only resume() -- a deep link straight into demo mode (main.ts’s ?demo=1) never calls resume()', async () => {
+    const demoRepo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    configureSession({
+      storage: fakeStorage(),
+      createSheetsRepo: unusedDemo,
+      createDemoRepo: () => demoRepo,
+      now: () => NOW,
+    })
+    const session = useSessionStore()
+    await session.startDemo(NOW)
+    await expect(session.ready).resolves.toBeUndefined()
+  })
+
   it('resolves once resume() settles, even when nothing was stored', async () => {
     configureSession({ storage: fakeStorage(), createSheetsRepo: unusedDemo, createDemoRepo: unusedDemo })
     const session = useSessionStore()

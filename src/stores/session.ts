@@ -67,16 +67,27 @@ export const useSessionStore = defineStore('session', () => {
     householdId.value = null
   }
 
-  /** "Try the demo" (Plan §5.5 Welcome): a seeded `MemoryRepo`, first adult as the member, never touches storage. */
+  /**
+   * "Try the demo" (Plan §5.5 Welcome): a seeded `MemoryRepo`, first adult as
+   * the member, never touches storage. Also marks `ready` (issue #20): the
+   * router guard's very first navigation awaits it before deciding whether
+   * to redirect, and a deep link straight into demo mode (`main.ts`'s
+   * `?demo=1#/log/...`) calls this instead of `resume()`, so without this
+   * that first navigation would await `ready` forever.
+   */
   async function startDemo(now?: Date): Promise<void> {
-    const opts = getSessionOptions()
-    const demo = opts.createDemoRepo(now ?? opts.now())
-    const household = await demo.connect(DEMO_LINK)
-    const firstAdult = Object.values(household.members).find((m) => m.role === 'adult')
-    if (!firstAdult) throw new Error('session.startDemo: the demo household has no adult member')
-    bindRepo(demo, household.id)
-    memberUid.value = firstAdult.uid
-    mode.value = 'demo'
+    try {
+      const opts = getSessionOptions()
+      const demo = opts.createDemoRepo(now ?? opts.now())
+      const household = await demo.connect(DEMO_LINK)
+      const firstAdult = Object.values(household.members).find((m) => m.role === 'adult')
+      if (!firstAdult) throw new Error('session.startDemo: the demo household has no adult member')
+      bindRepo(demo, household.id)
+      memberUid.value = firstAdult.uid
+      mode.value = 'demo'
+    } finally {
+      markReady()
+    }
   }
 
   /**

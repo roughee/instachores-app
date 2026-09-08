@@ -44,6 +44,15 @@ export function hasFlag(name: string): boolean {
   return new URLSearchParams(window.location.search).get(name) !== null
 }
 
+/** Reads a query flag's value off the current URL, or `null` if absent
+ * (issue #20's `?demoComplete=<taskId>,<taskId>`): the .vue files keep
+ * `window`/`URLSearchParams` out of their own `<script>` blocks (only `.ts`
+ * files carry eslint's browser globals), so this is the one place a screen
+ * reaches for a flag's value instead of `hasFlag`'s plain boolean. */
+export function flagValue(name: string): string | null {
+  return new URLSearchParams(window.location.search).get(name)
+}
+
 export function usePwa() {
   const { needRefresh: swNeedRefresh, updateServiceWorker } = useRegisterSW({ immediate: true })
   const forceUpdateToast = hasFlag('forceUpdateToast')
