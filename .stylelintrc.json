@@ -4,11 +4,21 @@
     "color-no-hex": [
       true,
       {
-        "message": "Use a token from src/styles/tokens.css (DESIGN.md §3), not a hex literal"
+        "message": "Use a token from src/styles/tokens.css (DESIGN.md \u00a73), not a hex literal"
       }
     ],
     "color-named": "never",
-    "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla"]
+    "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla"],
+    "selector-class-pattern": [
+      "^[a-z][a-z0-9]*(-[a-z0-9]+)*(__[a-z0-9]+(-[a-z0-9]+)*)?(--[a-z0-9]+(-[a-z0-9]+)*)?$",
+      {
+        "message": "Class names are kebab-case BEM: block__element--modifier"
+      }
+    ],
+    "import-notation": "string",
+    "comment-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "color-hex-length": null
   },
   "overrides": [
     {
