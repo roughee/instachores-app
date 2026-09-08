@@ -1,0 +1,21 @@
+{
+  "extends": ["stylelint-config-standard", "stylelint-config-recommended-vue"],
+  "rules": {
+    "color-no-hex": [
+      true,
+      {
+        "message": "Use a token from src/styles/tokens.css (DESIGN.md §3), not a hex literal"
+      }
+    ],
+    "color-named": "never",
+    "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla"]
+  },
+  "overrides": [
+    {
+      "files": ["src/styles/tokens.css"],
+      "rules": {
+        "color-no-hex": null
+      }
+    }
+  ]
+}

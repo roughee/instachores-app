@@ -4,8 +4,5 @@ import EmptyState from '@/components/EmptyState.vue'
 </script>
 
 <template>
-  <EmptyState
-    :icon="PhClockCounterClockwise"
-    label="See what happened today once someone logs a task."
-  />
+  <EmptyState :icon="PhClockCounterClockwise" label="See what happened today once someone logs a task." />
 </template>

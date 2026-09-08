@@ -10,9 +10,7 @@ const category = computed(() => {
   return typeof raw === 'string' ? raw : ''
 })
 const label = computed(() =>
-  category.value
-    ? `Tasks for ${category.value} are coming soon.`
-    : 'Tasks for this category are coming soon.',
+  category.value ? `Tasks for ${category.value} are coming soon.` : 'Tasks for this category are coming soon.',
 )
 </script>
 

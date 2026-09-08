@@ -59,12 +59,7 @@ function logKitchenReset(): void {
         <span>{{ tab.label }}</span>
       </RouterLink>
 
-      <button
-        type="button"
-        class="app-shell__fab"
-        aria-label="Kitchen Reset"
-        @click="logKitchenReset"
-      >
+      <button type="button" class="app-shell__fab" aria-label="Kitchen Reset" @click="logKitchenReset">
         <PhCookingPot :size="24" weight="regular" aria-hidden="true" />
       </button>
 
@@ -141,7 +136,9 @@ function logKitchenReset(): void {
   color: var(--text-2);
   font-size: var(--fs-xs);
   text-decoration: none;
-  transition: color var(--dur-press) ease-out, background-color var(--dur-press) ease-out;
+  transition:
+    color var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out;
 }
 
 .app-shell__tab:active {
