@@ -44,6 +44,22 @@ export function hasFlag(name: string): boolean {
   return new URLSearchParams(window.location.search).get(name) !== null
 }
 
+/**
+ * Dev-only `?pollMs=` override for `SheetsRepo`'s poll interval (issue #22
+ * e2e smoke), read by `main.ts` when building the repo: lets the two-context
+ * sync test see a partner's event within one short poll instead of the real
+ * 30s cadence, the same query-flag pattern as `hasFlag` above. Harmless in
+ * production since nobody links to the app with this param. `undefined` for
+ * a missing, non-numeric or non-positive value, so the caller falls back to
+ * `SheetsRepo`'s own default.
+ */
+export function readPollIntervalMs(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('pollMs')
+  if (raw === null) return undefined
+  const ms = Number(raw)
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined
+}
+
 /** Reads a query flag's value off the current URL, or `null` if absent
  * (issue #20's `?demoComplete=<taskId>,<taskId>`): the .vue files keep
  * `window`/`URLSearchParams` out of their own `<script>` blocks (only `.ts`

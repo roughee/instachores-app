@@ -138,5 +138,21 @@ export default tseslint.config(
       },
     },
   },
+  {
+    // Playwright e2e (issue #22): Node test files whose `page.evaluate`
+    // callbacks (`e2e/support/colorAudit.ts`) run inside the browser page,
+    // not Node, hence the browser globals alongside Node's, same as
+    // scripts/**/*.{js,mjs,ts} above.
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        document: 'readonly',
+        getComputedStyle: 'readonly',
+        navigator: 'readonly',
+      },
+    },
+  },
   configPrettier,
 )

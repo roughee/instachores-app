@@ -12,7 +12,14 @@ vi.mock('virtual:pwa-register/vue', () => ({
   useRegisterSW: vi.fn(() => registerSW),
 }))
 
-import { flagValue, hasFlag, installCardVisible, isStandaloneDisplay, usePwa } from '@/composables/usePwa'
+import {
+  flagValue,
+  hasFlag,
+  installCardVisible,
+  isStandaloneDisplay,
+  readPollIntervalMs,
+  usePwa,
+} from '@/composables/usePwa'
 import { withSetup } from '../helpers/withSetup'
 
 describe('hasFlag / flagValue', () => {
@@ -134,5 +141,27 @@ describe('usePwa', () => {
     window.history.replaceState({}, '', '/?forceInstallCard=1')
     const [pwa] = withSetup(() => usePwa())
     expect(pwa.showInstallCard.value).toBe(true)
+  })
+})
+
+describe('readPollIntervalMs (issue #22)', () => {
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('is undefined with no ?pollMs= flag, so SheetsRepo keeps its own default', () => {
+    expect(readPollIntervalMs()).toBeUndefined()
+  })
+
+  it('reads a positive ?pollMs= as a number', () => {
+    window.history.replaceState({}, '', '/?pollMs=500')
+    expect(readPollIntervalMs()).toBe(500)
+  })
+
+  it('ignores a zero, negative or non-numeric value', () => {
+    for (const bad of ['0', '-5', 'nope']) {
+      window.history.replaceState({}, '', `/?pollMs=${bad}`)
+      expect(readPollIntervalMs()).toBeUndefined()
+    }
   })
 })

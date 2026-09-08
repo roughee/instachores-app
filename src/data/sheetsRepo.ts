@@ -44,6 +44,10 @@ export interface SheetsRepoOptions {
   now?: () => Date
   log?: RepoLog
   timers?: RepoTimers
+  /** Overrides the poll cadence (default 30s, issue #22): the e2e sync test
+   * shortens this via `main.ts`'s dev-only `?pollMs=` flag so a partner's
+   * event shows up within one poll instead of waiting on the real interval. */
+  pollIntervalMs?: number
 }
 
 /** The status shape is the interface's; kept under this name for callers that import it from here. */
@@ -158,6 +162,7 @@ export class SheetsRepo implements HouseholdRepo {
   private readonly now: () => Date
   private readonly log: RepoLog
   private readonly timers: RepoTimers
+  private readonly pollIntervalMs: number
 
   private state: RepoState = { tasks: [], rewards: [], events: [] }
   private initPromise: Promise<void> | undefined
@@ -168,15 +173,7 @@ export class SheetsRepo implements HouseholdRepo {
   private readonly eventWatchers = new Set<EventWatcher>()
   private readonly statusWatchers = new Set<(s: SheetsRepoStatus) => void>()
 
-  private status: SheetsRepoStatus = {
-    online: true,
-    outboxCount: 0,
-    lastPollAt: undefined,
-    lastError: undefined,
-    skippedRows: 0,
-    lastSkipped: undefined,
-    intervalMs: POLL_INTERVAL_MS,
-  }
+  private status: SheetsRepoStatus
 
   private timer: ReturnType<typeof setTimeout> | undefined
   private running = false
@@ -190,7 +187,25 @@ export class SheetsRepo implements HouseholdRepo {
     this.fetchImpl = options.fetch ?? fetch
     this.now = options.now ?? (() => new Date())
     this.log = options.log ?? defaultLog
-    this.timers = options.timers ?? { setTimeout, clearTimeout }
+    // Bound to `globalThis` (issue #22): a real browser's `window.setTimeout`/
+    // `clearTimeout` are receiver-checked and throw "Illegal invocation" when
+    // called as `this.timers.setTimeout(...)` -- detached from the global
+    // they were read off. Node's timers tolerate this, which is why it never
+    // showed up under Vitest's `environment: 'node'`, only in a real browser.
+    this.timers = options.timers ?? {
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    }
+    this.pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS
+    this.status = {
+      online: true,
+      outboxCount: 0,
+      lastPollAt: undefined,
+      lastError: undefined,
+      skippedRows: 0,
+      lastSkipped: undefined,
+      intervalMs: this.pollIntervalMs,
+    }
   }
 
   /** Loads the last-known state from the snapshot. Safe to call more than once; only the first load runs. */
@@ -508,7 +523,7 @@ export class SheetsRepo implements HouseholdRepo {
       }
     } else {
       this.consecutiveFailures = 0
-      this.status = { ...this.status, intervalMs: POLL_INTERVAL_MS }
+      this.status = { ...this.status, intervalMs: this.pollIntervalMs }
     }
     this.notifyStatus()
     this.scheduleNext()

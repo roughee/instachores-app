@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { createAppRouter } from './router'
+import { readPollIntervalMs } from './composables/usePwa'
 import { Outbox } from './data/outbox'
 import { createDemoRepo } from './data/memoryRepo'
 import { SheetsRepo } from './data/sheetsRepo'
@@ -17,9 +18,18 @@ import './styles/base.css'
 
 /** `householdId` is a construction-time placeholder: `SheetsRepo` never reads
  * it back (every call takes its own `id` parameter); the real household id,
- * once known from `connect()`/`resume()`, lives in the session store. */
+ * once known from `connect()`/`resume()`, lives in the session store.
+ * `?pollMs=` (issue #22) is a dev-only override for the e2e sync test, read
+ * once here so both a fresh `connect()` and a `resume()` pick it up. */
 function createSheetsRepo(link: SetupLinkT): SheetsRepoLike {
-  return new SheetsRepo({ link, householdId: '', outbox: new Outbox(), snapshot: new Snapshot() })
+  const pollIntervalMs = readPollIntervalMs()
+  return new SheetsRepo({
+    link,
+    householdId: '',
+    outbox: new Outbox(),
+    snapshot: new Snapshot(),
+    ...(pollIntervalMs !== undefined && { pollIntervalMs }),
+  })
 }
 
 configureSession({
