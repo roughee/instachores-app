@@ -2,9 +2,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import { resolveBase } from './vite.base'
 
 export default defineConfig({
-  base: '/instachores-app/',
+  // Plan §6.13 / issue #12: PR previews override VITE_BASE so the built
+  // asset URLs resolve under `pr-<n>/` instead of the repo root.
+  base: resolveBase(process.env),
   plugins: [vue()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },

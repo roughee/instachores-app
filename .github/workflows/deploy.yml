@@ -1,0 +1,27 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          # PR previews live under pr-<n>/ on the same branch; without this
+          # every merge to main would wipe them out from under a phone that
+          # still has one installed.
+          keep_files: true
