@@ -3,13 +3,16 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+import { resolveBase } from './vite.base'
 
 // Plan §6.10 / issue #11: dark shell background and theme color so the
 // splash screen and status bar never flash light before the app paints.
 const SHELL_COLOR = '#131512'
 
 export default defineConfig({
-  base: '/instachores-app/',
+  // Plan §6.13 / issue #12: PR previews override VITE_BASE so the built
+  // asset URLs resolve under `pr-<n>/` instead of the repo root.
+  base: resolveBase(process.env),
   plugins: [
     vue(),
     VitePWA({

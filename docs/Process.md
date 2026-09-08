@@ -34,6 +34,10 @@ On `main`:
 - squash merge only
 - linear history required
 
+## Deploy
+
+Merging to `main` is the deploy: `deploy.yml` publishes `dist/` to the `gh-pages` branch once `npm run check` passes, and `preview.yml` publishes each open PR under `pr-<n>/` on the same branch until it closes (see the README's Deploy section for the URLs and settings).
+
 ## Squash commit message format
 
 Conventional Commits, matching the PR title used at merge time:

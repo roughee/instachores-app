@@ -47,7 +47,8 @@ const emit = defineEmits<{ reload: [] }>()
   padding: 0 12px;
   border: none;
   border-radius: var(--radius-button);
-  color: var(--primary);
+  /* Same foreground as the label: the accent on the inverted surface fails 4.5:1 in both themes. */
+  color: var(--bg);
   font-weight: 600;
   transition: background-color var(--dur-press) ease-out;
 }

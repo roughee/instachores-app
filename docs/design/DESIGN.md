@@ -49,7 +49,7 @@ CSS custom properties in `src/styles/tokens.css`, swapped under `[data-theme="da
 | `--border` | `#E1DDD3` | `#33382F` | Hairlines |
 | `--text` | `#1E1D1A` | `#EDEBE4` | Primary text (contrast >= 12:1 on `--bg`) |
 | `--text-2` | `#5F5C55` | `#A7A59C` | Secondary text (>= 4.5:1) |
-| `--primary` | `#1F8A70` | `#4FD1B3` | Brand teal-green: FAB, active tab, household bar, primary buttons |
+| `--primary` | `#128369` | `#4FD1B3` | Brand teal-green: FAB, active tab, household bar, primary buttons |
 | `--on-primary` | `#FFFFFF` | `#0E2A23` | Text on primary |
 | `--primary-soft` | `#DDF2EC` | `#1C3A33` | Tinted backgrounds behind primary content |
 | `--points` | `#C98A1E` | `#F2B85B` | Points, coins, reward costs, streak |
@@ -68,7 +68,7 @@ Secondary system. Each has a `-soft` tint for tile backgrounds.
 | Floors | `--cat-floors` | `#7A5AD9` | `#A88DF0` |
 | Bathroom | `--cat-bathroom` | `#2492A8` | `#5FC5D8` |
 | Kids | `--cat-kids` | `#C9508C` | `#EA84B6` |
-| Home | `--cat-home` | `#5A9A3A` | `#8FC96C` |
+| Home | `--cat-home` | `#539232` | `#8FC96C` |
 | Admin | `--cat-admin` | `#6B6F7A` | `#A0A4AE` |
 
 Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) that runs WCAG contrast math over the token file: every text token on every surface >= 4.5:1, every category color on its own `-soft` tint >= 3:1 (large text / icon threshold).
@@ -84,7 +84,7 @@ Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) 
   --border: #E1DDD3;
   --text: #1E1D1A;
   --text-2: #5F5C55;
-  --primary: #1F8A70;
+  --primary: #128369;
   --on-primary: #FFFFFF;
   --primary-soft: #DDF2EC;
   --points: #C98A1E;
@@ -96,7 +96,7 @@ Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) 
   --cat-floors: #7A5AD9;
   --cat-bathroom: #2492A8;
   --cat-kids: #C9508C;
-  --cat-home: #5A9A3A;
+  --cat-home: #539232;
   --cat-admin: #6B6F7A;
 
   --radius-card: 16px;
