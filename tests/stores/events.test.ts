@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRepo } from '@/data/memoryRepo'
 import { deriveState } from '@/domain/derive'
 import { SEED_IDS } from '@/domain/seed'
-import { DAY_MS } from '@/domain/time'
+import { completes, liveEvents } from '@/domain/events'
+import { DAY_MS, dayKey } from '@/domain/time'
 import { ChoreEvent } from '@/schemas'
 import { configureSession, useSessionStore } from '@/stores/session'
 import { useCatalogStore } from '@/stores/catalog'
@@ -327,6 +328,69 @@ describe('combo detection after complete', () => {
     await eventsStore.complete(SEED_IDS.trash)
     const bonusesAfter = eventsStore.events.filter((e) => e.type === 'bonus' && e.combo === 'kitchen-reset')
     expect(bonusesAfter).toHaveLength(1)
+  })
+})
+
+describe('eventsStore.todayRows / todayTotals (#18)', () => {
+  it('exposes today’s completes newest-first, with an undone row struck through and excluded from totals', async () => {
+    const pots = task({ id: 'task-pots', points: 4 })
+    const laundry = task({ id: 'task-fold', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots, laundry] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const potsEvent = eventsStore.events.find((e) => e.type === 'complete')!
+
+    clock = new Date(NOW.getTime() + 1000)
+    eventsStore.undo(potsEvent.id)
+
+    clock = new Date(NOW.getTime() + 60_000)
+    await eventsStore.complete('task-fold', { forUid: BEN })
+
+    expect(eventsStore.todayRows.map((r) => r.taskId)).toEqual(['task-fold', 'task-pots'])
+    const potsRow = eventsStore.todayRows.find((r) => r.taskId === 'task-pots')!
+    expect(potsRow.undone).toBe(true)
+    expect(eventsStore.todayTotals.household).toBe(3)
+    expect(eventsStore.todayTotals.byMember[ANA]).toBeUndefined()
+    expect(eventsStore.todayTotals.byMember[BEN]).toBe(3)
+  })
+
+  it('groups by the household timezone’s hour, not UTC (Vilnius fixture)', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots') // NOW is 21:00 Vilnius
+
+    expect(eventsStore.todayRows[0]!.hourKey).toBe('21')
+  })
+
+  it('todayTotals.household equals the sum of today’s live complete points from the domain layer, not re-derived here', async () => {
+    const pots = task({ id: 'task-pots', points: 4 })
+    const laundry = task({ id: 'task-fold', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots, laundry] }])
+    const { eventsStore, householdStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    clock = new Date(NOW.getTime() + 60_000)
+    await eventsStore.complete('task-fold', { forUid: BEN })
+
+    const tz = householdStore.household!.tz
+    const today = dayKey(clock, tz)
+    const expected = completes(liveEvents(eventsStore.events))
+      .filter((e) => dayKey(e.at, tz) === today)
+      .reduce((sum, e) => sum + e.points, 0)
+
+    expect(eventsStore.todayTotals.household).toBe(expected)
+  })
+
+  it('is empty before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.todayRows).toEqual([])
+    expect(eventsStore.todayTotals).toEqual({ household: 0, byMember: {} })
   })
 })
 

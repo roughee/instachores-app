@@ -15,6 +15,8 @@ import { detectCombos } from '@/domain/combos'
 import { deriveState } from '@/domain/derive'
 import type { Derived } from '@/domain/derive'
 import { liveEvents } from '@/domain/events'
+import { buildToday } from '@/domain/today'
+import type { TodayRow, TodayTotals } from '@/domain/today'
 import { DAY_MS, dayKey, startOfMonth } from '@/domain/time'
 import { Category, ChoreEvent } from '@/schemas'
 import type { ChoreEvent as ChoreEventT, EventOf } from '@/schemas'
@@ -37,6 +39,8 @@ export interface CompleteOptions {
 }
 
 export type UndoResult = { ok: true } | { ok: false; reason: string }
+
+export type { TodayRow, TodayTotals } from '@/domain/today'
 
 function emptyDerived(): Derived {
   const dueDots = Object.fromEntries(Category.options.map((c) => [c, false])) as Record<Category, boolean>
@@ -157,6 +161,25 @@ export const useEventsStore = defineStore('events', () => {
     events.value = mergeEvents(events.value, [e])
   }
 
+  /** The Today screen's feed (Plan §5.5 `#/today`): `buildToday`'s output over
+   * the current events/tasks/household/now, the same domain-first shape as
+   * `derived` above, so the two screens can never disagree on a total. */
+  const today = computed(() => {
+    const householdStore = useHouseholdStore()
+    const catalogStore = useCatalogStore()
+    if (!householdStore.household)
+      return { rows: [] as TodayRow[], totals: { household: 0, byMember: {} } as TodayTotals }
+    return buildToday({
+      events: events.value,
+      tasks: catalogStore.tasks,
+      household: householdStore.household,
+      now: clockNow.value,
+    })
+  })
+
+  const todayRows = computed<TodayRow[]>(() => today.value.rows)
+  const todayTotals = computed<TodayTotals>(() => today.value.totals)
+
   /** Runs combo detection for `day` against the events applied so far and applies any new bonus locally. */
   function detectAndApplyBonuses(day: string, actorUid: string, at: Date): EventOf<'bonus'>[] {
     const householdStore = useHouseholdStore()
@@ -259,5 +282,17 @@ export const useEventsStore = defineStore('events', () => {
     return { ok: true }
   }
 
-  return { events, recentlyLogged, derived, youToday, doneTodayByTask, bind, unbind, complete, undo }
+  return {
+    events,
+    recentlyLogged,
+    derived,
+    youToday,
+    doneTodayByTask,
+    todayRows,
+    todayTotals,
+    bind,
+    unbind,
+    complete,
+    undo,
+  }
 })

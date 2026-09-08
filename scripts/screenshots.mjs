@@ -140,3 +140,33 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 16-welcome-error-${scheme}.png`)
 }
+
+// Issue #18: Today screen, grouped by hour. Reuses main.ts's `demo=1` /
+// `demoLogs=N` flags (issue #17) as-is: `demoLogs=3` completes three
+// quick-row tasks, which show up here too since Today reads the same
+// events the household bar does.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    colorScheme: scheme,
+  })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3#/today`, { waitUntil: 'networkidle' })
+  await page.locator('.today-row').first().waitFor()
+  await page.screenshot({ path: `${OUT_DIR}18-today-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 18-today-${scheme}.png`)
+}
+
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    colorScheme: scheme,
+  })
+  await page.goto(`${BASE_URL}?demo=1#/today`, { waitUntil: 'networkidle' })
+  await page.getByText('Quiet so far').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}18-today-empty-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 18-today-empty-${scheme}.png`)
+}
