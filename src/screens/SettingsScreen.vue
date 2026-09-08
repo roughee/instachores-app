@@ -34,7 +34,7 @@ import type { Theme } from '@/schemas'
 import { useHouseholdStore } from '@/stores/household'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
-import pkg from '../../package.json'
+import { version as appVersion } from '../../package.json'
 
 const REPO_URL = 'https://github.com/roughee/instachores-app'
 
@@ -106,10 +106,6 @@ async function onDisconnect(): Promise<void> {
     disconnecting.value = false
   }
 }
-
-// -- About --------------------------------------------------------------
-
-const appVersion = pkg.version
 </script>
 
 <template>
