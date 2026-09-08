@@ -12,5 +12,7 @@ HomeCrew: a household chores PWA that makes the daily grind count. Two taps to l
 ```bash
 npm install
 npm run test:watch   # red, green, refactor
-npm run check        # typecheck + tests with coverage gates (same as CI)
+npm run check        # lint + format check + typecheck + tests with coverage gates (same as CI)
 ```
+
+Format-on-save: install the ESLint, Prettier and Stylelint VS Code extensions (recommended in `.vscode/extensions.json`) and enable `editor.formatOnSave`.

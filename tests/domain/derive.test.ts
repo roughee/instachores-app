@@ -9,7 +9,13 @@ const tasks = seedTasks(NOW, ANA)
 const rewards = seedRewards(NOW, ANA)
 const seed = (id: string) => tasks.find((t) => t.id === id)!
 const derive = (events: ChoreEvent[], extra: { tasks?: Task[]; rewards?: typeof rewards; now?: Date } = {}) =>
-  deriveState({ events, tasks: extra.tasks ?? tasks, rewards: extra.rewards ?? rewards, household: h, now: extra.now ?? NOW })
+  deriveState({
+    events,
+    tasks: extra.tasks ?? tasks,
+    rewards: extra.rewards ?? rewards,
+    household: h,
+    now: extra.now ?? NOW,
+  })
 
 const at = (iso: string) => new Date(iso)
 
@@ -149,13 +155,23 @@ describe('counters heat strip and streak', () => {
   it('the heat strip covers the last 7 local days ending today', () => {
     const d = derive([onDay('2026-09-09T10:00:00.000Z'), onDay('2026-09-06T10:00:00.000Z')])
     expect(d.heatStrip.map((x) => x.day)).toEqual([
-      '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09',
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
     ])
     expect(d.heatStrip.filter((x) => x.countersDone).map((x) => x.day)).toEqual(['2026-09-06', '2026-09-09'])
   })
 
   it('the streak counts consecutive days ending today', () => {
-    const d = derive([onDay('2026-09-07T10:00:00.000Z'), onDay('2026-09-08T10:00:00.000Z'), onDay('2026-09-09T10:00:00.000Z')])
+    const d = derive([
+      onDay('2026-09-07T10:00:00.000Z'),
+      onDay('2026-09-08T10:00:00.000Z'),
+      onDay('2026-09-09T10:00:00.000Z'),
+    ])
     expect(d.streaks.countersClean).toBe(3)
   })
 

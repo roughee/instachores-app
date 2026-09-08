@@ -123,7 +123,13 @@ export function deriveState(input: DeriveInput): Derived {
         add(claim.forUid, -claim.cost)
       }
     } else if (!settledBy(declines, claim)) {
-      pendingClaims.push({ claimId: claim.id, rewardId: claim.rewardId, forUid: claim.forUid, cost: claim.cost, at: claim.at })
+      pendingClaims.push({
+        claimId: claim.id,
+        rewardId: claim.rewardId,
+        forUid: claim.forUid,
+        cost: claim.cost,
+        at: claim.at,
+      })
     }
   }
   const pooled = adults.reduce((sum, uid) => sum + (balances[uid] ?? 0), 0)
@@ -165,7 +171,8 @@ export function deriveState(input: DeriveInput): Derived {
     return { day, countersDone: countersDays.has(day) }
   })
   let streak = 0
-  for (let day = countersDays.has(today) ? today : shiftDay(today, -1); countersDays.has(day); day = shiftDay(day, -1)) streak += 1
+  for (let day = countersDays.has(today) ? today : shiftDay(today, -1); countersDays.has(day); day = shiftDay(day, -1))
+    streak += 1
 
   // Quick row: top three by completions in the last 14 days, defaults fill the rest.
   const since = now.getTime() - QUICK_ROW_WINDOW_DAYS * DAY_MS
@@ -197,5 +204,16 @@ export function deriveState(input: DeriveInput): Derived {
     if (t.forRole !== 'kid' && isDue(t, lastDone.get(t.id), now)) dueDots[t.category] = true
   }
 
-  return { balances, stars, pooled, week, month, pendingClaims, streaks: { countersClean: streak }, heatStrip, quickRow, dueDots }
+  return {
+    balances,
+    stars,
+    pooled,
+    week,
+    month,
+    pendingClaims,
+    streaks: { countersClean: streak },
+    heatStrip,
+    quickRow,
+    dueDots,
+  }
 }

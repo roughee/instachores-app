@@ -1,0 +1,10 @@
+dist
+coverage
+node_modules
+tests/lint/fixtures
+package-lock.json
+
+# Vendored skills and prose docs are out of scope for this ticket's format
+# gate (issue #7): only src/ and tests/ code is enforced by format:check.
+.claude/skills
+docs
