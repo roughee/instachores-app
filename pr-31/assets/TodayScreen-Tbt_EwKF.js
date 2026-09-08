@@ -1,1 +1,0 @@
-import{f as e,h as t,i as n,l as r,v as i}from"./index-CbK-N4VG.js";import{t as a}from"./EmptyState-C30_UKin.js";var o=e({__name:`TodayScreen`,setup(e){return(e,o)=>(t(),r(a,{icon:i(n),label:`See what happened today once someone logs a task.`},null,8,[`icon`]))}});export{o as default};

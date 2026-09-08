@@ -1,1 +1,0 @@
-import{f as e,h as t,l as n,n as r,v as i}from"./index-CbK-N4VG.js";import{t as a}from"./EmptyState-C30_UKin.js";var o=e({__name:`LogScreen`,setup(e){return(e,o)=>(t(),n(a,{icon:i(r),label:`Log a task in two taps once tasks are loaded.`},null,8,[`icon`]))}});export{o as default};
