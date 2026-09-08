@@ -23,7 +23,7 @@ There is no server we run, no database we administer, no accounts. Decision and 
 
 ## 2. Layers
 
-Dependencies point downward only. Nothing below the app-state layer imports Vue or Pinia. The domain layer imports nothing but schemas.
+Dependencies point downward only. Nothing below the app-state layer imports Vue or Pinia. The domain layer imports nothing but schemas; the data layer may import domain (the seed catalog for the demo household) but domain never imports data.
 
 | Layer | Lives in | Responsibility | Imports |
 |---|---|---|---|
@@ -31,7 +31,7 @@ Dependencies point downward only. Nothing below the app-state layer imports Vue 
 | App state | `src/stores/` | Pinia: `household`, `catalog`, `events`, `sync`, `prefs`. Hold parsed data, expose getters that call the domain. Own the optimistic apply of outbox entries. | domain, schemas, data |
 | Domain | `src/domain/` | Pure TypeScript: `derive.ts` (balances, rollups, streaks), `combos.ts`, `schedule.ts`, `time.ts`, `ids.ts`, `seed.ts`. Time and ids are injected. `Math.random` is banned here. | schemas |
 | Schemas | `src/schemas/` | Zod schemas for Household, Member, Task, Reward, ChoreEvent, Backup, SetupLink, plus `migrate.ts`. Types are `z.infer`. | zod |
-| Data | `src/data/` | `repo.ts` (the `HouseholdRepo` interface), `sheetsRepo.ts`, `outbox.ts`, `snapshot.ts`, `memoryRepo.ts`. Parse on every read, parse before every write. | schemas, idb-keyval |
+| Data | `src/data/` | `repo.ts` (the `HouseholdRepo` interface), `sheetsRepo.ts`, `outbox.ts`, `snapshot.ts`, `memoryRepo.ts`, `demo.ts`. Parse on every read, parse before every write. | schemas, domain (seed and demo data only), idb-keyval |
 | Backend | `apps-script/` | `Code.js`: `doPost` router, sheet I/O, lock, secret check. Deployed with `clasp`. | Apps Script runtime |
 
 The `HouseholdRepo` interface is the seam:

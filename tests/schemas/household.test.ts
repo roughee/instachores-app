@@ -55,7 +55,9 @@ describe('Setup link', () => {
 
   it('rejects garbage, a non-https url and a short secret', () => {
     expect(() => decodeSetupLink('not-base64!!')).toThrow()
-    expect(() => decodeSetupLink(encodeSetupLink({ url: 'http://example.com', secret: 'correct-horse-battery' }))).toThrow()
+    expect(() =>
+      decodeSetupLink(encodeSetupLink({ url: 'http://example.com', secret: 'correct-horse-battery' })),
+    ).toThrow()
     expect(() => decodeSetupLink(encodeSetupLink({ ...link, secret: 'short' }))).toThrow()
   })
 })

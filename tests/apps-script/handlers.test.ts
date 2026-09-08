@@ -24,11 +24,43 @@ const MEMBERS_ROWS = [
   ['ben', 'Ben', '#3f6fd4', 'adult'],
 ]
 
-const TASKS_HEADERS = ['v', 'id', 'name', 'category', 'points', 'freq', 'forRole', 'parentId', 'comboBonus', 'archived', 'sort', 'updatedAt', 'updatedBy']
+const TASKS_HEADERS = [
+  'v',
+  'id',
+  'name',
+  'category',
+  'points',
+  'freq',
+  'forRole',
+  'parentId',
+  'comboBonus',
+  'archived',
+  'sort',
+  'updatedAt',
+  'updatedBy',
+]
 const REWARDS_HEADERS = ['v', 'id', 'name', 'cost', 'kind', 'commitment', 'archived', 'updatedAt', 'updatedBy']
-const EVENTS_HEADERS = ['v', 'id', 'type', 'actorUid', 'at', 'loggedAt', 'note', 'taskId', 'forUid', 'points', 'refEventId', 'rewardId', 'cost', 'combo', 'day']
+const EVENTS_HEADERS = [
+  'v',
+  'id',
+  'type',
+  'actorUid',
+  'at',
+  'loggedAt',
+  'note',
+  'taskId',
+  'forUid',
+  'points',
+  'refEventId',
+  'rewardId',
+  'cost',
+  'combo',
+  'day',
+]
 
-function makeWorld(opts: { tasks?: unknown[][]; rewards?: unknown[][]; events?: unknown[][]; tryLockSucceeds?: boolean } = {}) {
+function makeWorld(
+  opts: { tasks?: unknown[][]; rewards?: unknown[][]; events?: unknown[][]; tryLockSucceeds?: boolean } = {},
+) {
   const ss = new FakeSpreadsheet({
     household: [
       ['key', 'value'],
@@ -44,7 +76,9 @@ function makeWorld(opts: { tasks?: unknown[][]; rewards?: unknown[][]; events?: 
     rewards: opts.rewards ?? [REWARDS_HEADERS],
     events: opts.events ?? [EVENTS_HEADERS],
   })
-  const { LockService, state: lockState } = createFakeLockService(opts.tryLockSucceeds === undefined ? {} : { tryLockSucceeds: opts.tryLockSucceeds })
+  const { LockService, state: lockState } = createFakeLockService(
+    opts.tryLockSucceeds === undefined ? {} : { tryLockSucceeds: opts.tryLockSucceeds },
+  )
   const { PropertiesService } = createFakePropertiesService({ SECRET })
   const { ContentService } = createFakeContentService()
   const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
@@ -86,12 +120,58 @@ describe('secret check', () => {
 describe('events.append', () => {
   it('appends only the new event, stamps loggedAt, and reports appended and skipped', () => {
     const { HomeCrew, ctx, ss } = makeWorld({
-      events: [EVENTS_HEADERS, ['1', 'existing-1', 'complete', 'ana', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', '', 'pots', 'ana', '2', '', '', '', '', '']],
+      events: [
+        EVENTS_HEADERS,
+        [
+          '1',
+          'existing-1',
+          'complete',
+          'ana',
+          '2026-09-01T00:00:00.000Z',
+          '2026-09-01T00:00:00.000Z',
+          '',
+          'pots',
+          'ana',
+          '2',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ],
+      ],
     })
     const events = [
-      { v: 1, id: 'existing-1', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 },
-      { v: 1, id: 'existing-1-dup-in-batch', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 },
-      { v: 1, id: 'new-1', type: 'complete', actorUid: 'ben', at: '2026-09-08T10:05:00.000Z', taskId: 'counters', forUid: 'ben', points: 3 },
+      {
+        v: 1,
+        id: 'existing-1',
+        type: 'complete',
+        actorUid: 'ana',
+        at: '2026-09-08T10:00:00.000Z',
+        taskId: 'pots',
+        forUid: 'ana',
+        points: 2,
+      },
+      {
+        v: 1,
+        id: 'existing-1-dup-in-batch',
+        type: 'complete',
+        actorUid: 'ana',
+        at: '2026-09-08T10:00:00.000Z',
+        taskId: 'pots',
+        forUid: 'ana',
+        points: 2,
+      },
+      {
+        v: 1,
+        id: 'new-1',
+        type: 'complete',
+        actorUid: 'ben',
+        at: '2026-09-08T10:05:00.000Z',
+        taskId: 'counters',
+        forUid: 'ben',
+        points: 3,
+      },
     ]
     // Make the first two collide: reuse the same id as the already-stored row plus one more pre-existing id.
     events[1]!.id = 'existing-1'
@@ -116,7 +196,18 @@ describe('events.append', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'events.append',
-        events: [{ v: 1, id: '', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 }],
+        events: [
+          {
+            v: 1,
+            id: '',
+            type: 'complete',
+            actorUid: 'ana',
+            at: '2026-09-08T10:00:00.000Z',
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 2,
+          },
+        ],
       }),
     )
     expect(res).toMatchObject({ ok: false, code: 'invalid' })
@@ -130,7 +221,18 @@ describe('events.append', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'events.append',
-        events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 51 }],
+        events: [
+          {
+            v: 1,
+            id: 'e1',
+            type: 'complete',
+            actorUid: 'ana',
+            at: '2026-09-08T10:00:00.000Z',
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 51,
+          },
+        ],
       }),
     )
     expect(res).toMatchObject({ ok: false, code: 'invalid' })
@@ -144,7 +246,18 @@ describe('events.append', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'events.append',
-        events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'stranger', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 }],
+        events: [
+          {
+            v: 1,
+            id: 'e1',
+            type: 'complete',
+            actorUid: 'stranger',
+            at: '2026-09-08T10:00:00.000Z',
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 2,
+          },
+        ],
       }),
     )
     expect(res).toMatchObject({ ok: false, code: 'invalid' })
@@ -158,7 +271,18 @@ describe('events.append', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'events.append',
-        events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 }],
+        events: [
+          {
+            v: 1,
+            id: 'e1',
+            type: 'complete',
+            actorUid: 'ana',
+            at: '2026-09-08T10:00:00.000Z',
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 2,
+          },
+        ],
       }),
     )
     expect(res).toEqual({ ok: false, code: 'locked', message: expect.any(String) })
@@ -184,7 +308,18 @@ describe('events.append', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'events.append',
-        events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: '2026-09-08T10:00:00.000Z', taskId: 'pots', forUid: 'ana', points: 2 }],
+        events: [
+          {
+            v: 1,
+            id: 'e1',
+            type: 'complete',
+            actorUid: 'ana',
+            at: '2026-09-08T10:00:00.000Z',
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 2,
+          },
+        ],
       }),
     )
     expect(res.ok).toBe(false)
@@ -198,15 +333,65 @@ describe('events.since', () => {
   function seededEvents() {
     return [
       EVENTS_HEADERS,
-      ['1', 'e-old', 'complete', 'ana', '2026-09-08T09:00:00.000Z', '2026-09-08T09:00:00.000Z', '', 'pots', 'ana', '2', '', '', '', '', ''],
-      ['1', 'e-boundary', 'complete', 'ana', '2026-09-08T09:59:59.500Z', '2026-09-08T09:59:59.500Z', '', 'pots', 'ana', '2', '', '', '', '', ''],
-      ['1', 'e-new', 'complete', 'ben', '2026-09-08T10:00:05.000Z', '2026-09-08T10:00:05.000Z', '', 'counters', 'ben', '3', '', '', '', '', ''],
+      [
+        '1',
+        'e-old',
+        'complete',
+        'ana',
+        '2026-09-08T09:00:00.000Z',
+        '2026-09-08T09:00:00.000Z',
+        '',
+        'pots',
+        'ana',
+        '2',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ],
+      [
+        '1',
+        'e-boundary',
+        'complete',
+        'ana',
+        '2026-09-08T09:59:59.500Z',
+        '2026-09-08T09:59:59.500Z',
+        '',
+        'pots',
+        'ana',
+        '2',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ],
+      [
+        '1',
+        'e-new',
+        'complete',
+        'ben',
+        '2026-09-08T10:00:05.000Z',
+        '2026-09-08T10:00:05.000Z',
+        '',
+        'counters',
+        'ben',
+        '3',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ],
     ]
   }
 
   it('returns only rows with loggedAt after the cursor, plus serverTime', () => {
     const { HomeCrew, ctx } = makeWorld({ events: seededEvents() })
-    const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.since', since: '2026-09-08T10:00:00.000Z' }))
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.since', since: '2026-09-08T10:00:00.000Z' }),
+    )
     expect(res.ok).toBe(true)
     const ids = (res.events as { id: string }[]).map((e) => e.id)
     expect(ids).not.toContain('e-old')
@@ -216,14 +401,30 @@ describe('events.since', () => {
 
   it('includes rows logged within one second before the cursor, to avoid a boundary miss', () => {
     const { HomeCrew, ctx } = makeWorld({ events: seededEvents() })
-    const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.since', since: '2026-09-08T10:00:00.000Z' }))
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.since', since: '2026-09-08T10:00:00.000Z' }),
+    )
     const ids = (res.events as { id: string }[]).map((e) => e.id)
     expect(ids).toContain('e-boundary')
   })
 })
 
 describe('tasks.upsert', () => {
-  const existingRow = ['1', 'task-pots', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana']
+  const existingRow = [
+    '1',
+    'task-pots',
+    'Pots',
+    'kitchen',
+    '2',
+    'daily',
+    'adult',
+    '',
+    '',
+    'FALSE',
+    '0',
+    '2026-09-01T00:00:00.000Z',
+    'ana',
+  ]
 
   it('answers conflict and leaves the row unchanged when updatedAt is older than stored', () => {
     const { HomeCrew, ctx, ss } = makeWorld({ tasks: [TASKS_HEADERS, existingRow] })
@@ -313,7 +514,16 @@ describe('rewards.upsert', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'rewards.upsert',
-        reward: { v: 1, id: 'reward-bath', name: 'Long bath', cost: 20, kind: 'solo', archived: false, updatedAt: '2026-08-01T00:00:00.000Z', updatedBy: 'ben' },
+        reward: {
+          v: 1,
+          id: 'reward-bath',
+          name: 'Long bath',
+          cost: 20,
+          kind: 'solo',
+          archived: false,
+          updatedAt: '2026-08-01T00:00:00.000Z',
+          updatedBy: 'ben',
+        },
       }),
     )
     expect(res).toMatchObject({ ok: false, code: 'conflict' })
@@ -328,8 +538,33 @@ describe('seed', () => {
       HomeCrew.handleRequest(ctx, {
         secret: SECRET,
         action: 'seed',
-        tasks: [{ v: 1, id: 't1', name: 'Pots', category: 'kitchen', points: 2, freq: 'daily', forRole: 'adult', archived: false, sort: 0, updatedAt: '2026-09-01T00:00:00.000Z', updatedBy: 'ana' }],
-        rewards: [{ v: 1, id: 'r1', name: 'Bath', cost: 15, kind: 'solo', archived: false, updatedAt: '2026-09-01T00:00:00.000Z', updatedBy: 'ana' }],
+        tasks: [
+          {
+            v: 1,
+            id: 't1',
+            name: 'Pots',
+            category: 'kitchen',
+            points: 2,
+            freq: 'daily',
+            forRole: 'adult',
+            archived: false,
+            sort: 0,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            updatedBy: 'ana',
+          },
+        ],
+        rewards: [
+          {
+            v: 1,
+            id: 'r1',
+            name: 'Bath',
+            cost: 15,
+            kind: 'solo',
+            archived: false,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            updatedBy: 'ana',
+          },
+        ],
       }),
     )
     expect(res).toMatchObject({ ok: true, tasks: 1, rewards: 1 })
@@ -338,7 +573,12 @@ describe('seed', () => {
   })
 
   it('refuses when the tasks tab is not empty', () => {
-    const { HomeCrew, ctx, ss } = makeWorld({ tasks: [TASKS_HEADERS, ['1', 't1', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana']] })
+    const { HomeCrew, ctx, ss } = makeWorld({
+      tasks: [
+        TASKS_HEADERS,
+        ['1', 't1', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana'],
+      ],
+    })
     const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'seed', tasks: [], rewards: [] }))
     expect(res).toMatchObject({ ok: false, code: 'invalid' })
     expect(ss.getSheetByName('rewards')!.snapshot().length).toBe(1)
@@ -386,14 +626,37 @@ beforeEach(() => {
 describe('module shape', () => {
   it('exposes the full action table', () => {
     expect(Object.keys(hc.ACTIONS).sort()).toEqual(
-      ['bootstrap', 'events.append', 'events.since', 'household.update', 'rewards.upsert', 'seed', 'tasks.upsert', 'version'].sort(),
+      [
+        'bootstrap',
+        'events.append',
+        'events.since',
+        'household.update',
+        'rewards.upsert',
+        'seed',
+        'tasks.upsert',
+        'version',
+      ].sort(),
     )
   })
 })
 
 describe('sheet row bookkeeping', () => {
   const blankRow = TASKS_HEADERS.map(() => '')
-  const pots = ['1', 'task-pots', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana']
+  const pots = [
+    '1',
+    'task-pots',
+    'Pots',
+    'kitchen',
+    '2',
+    'daily',
+    'adult',
+    '',
+    '',
+    'FALSE',
+    '0',
+    '2026-09-01T00:00:00.000Z',
+    'ana',
+  ]
 
   it('tasks.upsert writes back to the right sheet row when a blank row sits above the target', () => {
     const { HomeCrew, ctx, ss } = makeWorld({ tasks: [TASKS_HEADERS, blankRow, pots] })
@@ -427,12 +690,35 @@ describe('sheet row bookkeeping', () => {
     HomeCrew.handleRequest(ctx, {
       secret: SECRET,
       action: 'events.append',
-      events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: '2026-09-09T18:00:00.000Z', taskId: 'task-pots', forUid: 'ana', points: 2 }],
+      events: [
+        {
+          v: 1,
+          id: 'e1',
+          type: 'complete',
+          actorUid: 'ana',
+          at: '2026-09-09T18:00:00.000Z',
+          taskId: 'task-pots',
+          forUid: 'ana',
+          points: 2,
+        },
+      ],
     })
     HomeCrew.handleRequest(ctx, {
       secret: SECRET,
       action: 'tasks.upsert',
-      task: { v: 1, id: 'task-new', name: 'New', category: 'kitchen', points: 1, freq: 'daily', forRole: 'adult', archived: false, sort: 0, updatedAt: '2026-09-02T00:00:00.000Z', updatedBy: 'ana' },
+      task: {
+        v: 1,
+        id: 'task-new',
+        name: 'New',
+        category: 'kitchen',
+        points: 1,
+        freq: 'daily',
+        forRole: 'adult',
+        archived: false,
+        sort: 0,
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        updatedBy: 'ana',
+      },
     })
     expect(ss.getSheetByName('events')!.formats).toContainEqual(expect.objectContaining({ row: 2, format: '@' }))
     expect(ss.getSheetByName('tasks')!.formats).toContainEqual(expect.objectContaining({ row: 2, format: '@' }))

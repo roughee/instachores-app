@@ -1,7 +1,7 @@
 ---
 name: Feature
 about: A new behaviour or change, scoped as one ticket
-title: "[Feature] "
+title: '[Feature] '
 labels: needs-spec
 ---
 
@@ -22,6 +22,7 @@ labels: needs-spec
 ## Done when
 
 <!-- Copy or adapt from Plan.md §7.3, e.g.: -->
+
 - [ ] all named tests exist, were seen failing, now pass
 - [ ] vue-tsc, eslint, vitest, build all green in CI
 - [ ] screenshots light + dark attached (UI ticket)

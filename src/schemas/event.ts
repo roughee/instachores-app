@@ -23,11 +23,27 @@ export const ChoreEvent = z.discriminatedUnion('type', [
   EventBase.extend({ type: z.literal('complete'), taskId: Id, forUid: z.string().min(1), points: Points }),
   EventBase.extend({ type: z.literal('undo'), refEventId: Id }),
   EventBase.extend({ type: z.literal('kudos'), refEventId: Id, points: Int(z.literal(1)) }),
-  EventBase.extend({ type: z.literal('claim'), rewardId: Id, forUid: z.string().min(1), cost: Int(z.number().int().positive()) }),
+  EventBase.extend({
+    type: z.literal('claim'),
+    rewardId: Id,
+    forUid: z.string().min(1),
+    cost: Int(z.number().int().positive()),
+  }),
   EventBase.extend({ type: z.literal('ack'), refEventId: Id }),
   EventBase.extend({ type: z.literal('decline'), refEventId: Id }),
-  EventBase.extend({ type: z.literal('adjust'), forUid: z.string().min(1), points: Int(z.number().int()), note: z.string().min(1).max(140) }),
-  EventBase.extend({ type: z.literal('bonus'), forUid: z.string().min(1), points: Points, combo: z.string().min(1), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+  EventBase.extend({
+    type: z.literal('adjust'),
+    forUid: z.string().min(1),
+    points: Int(z.number().int()),
+    note: z.string().min(1).max(140),
+  }),
+  EventBase.extend({
+    type: z.literal('bonus'),
+    forUid: z.string().min(1),
+    points: Points,
+    combo: z.string().min(1),
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
 ])
 export type ChoreEvent = z.infer<typeof ChoreEvent>
 export type EventType = ChoreEvent['type']

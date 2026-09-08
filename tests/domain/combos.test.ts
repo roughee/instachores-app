@@ -101,7 +101,9 @@ describe('group task combos (parent with comboBonus)', () => {
     const sink = task({ id: 'sink', parentId: 'bath', points: 2 })
     const old = task({ id: 'old', parentId: 'bath', points: 1, archived: true })
     const combos = combosFromTasks([parent, toilet, sink, old])
-    expect(combos).toEqual([{ key: 'bath', name: 'Clean bathroom', category: 'bathroom', bonus: 2, groups: [['toilet'], ['sink']] }])
+    expect(combos).toEqual([
+      { key: 'bath', name: 'Clean bathroom', category: 'bathroom', bonus: 2, groups: [['toilet'], ['sink']] },
+    ])
   })
 
   it('emits the parent bonus when all sub-items are done the same day', () => {

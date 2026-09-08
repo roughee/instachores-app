@@ -8,7 +8,13 @@
  * read, so a row shaped wrong is skipped and logged, never thrown.
  */
 import { ChoreEvent, Household, Reward, Task } from '@/schemas'
-import type { ChoreEvent as ChoreEventT, Household as HouseholdT, Reward as RewardT, SetupLink, Task as TaskT } from '@/schemas'
+import type {
+  ChoreEvent as ChoreEventT,
+  Household as HouseholdT,
+  Reward as RewardT,
+  SetupLink,
+  Task as TaskT,
+} from '@/schemas'
 import type { z } from 'zod'
 import { demoRepoSeed } from './demo'
 import { RepoError } from './repo'

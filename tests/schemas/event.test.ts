@@ -26,10 +26,12 @@ describe('ChoreEvent schema', () => {
   })
 
   it('rejects negative points on a complete and notes longer than 140 characters', () => {
-    expect(ChoreEvent.safeParse({ ...base, type: 'complete', taskId: 't', forUid: 'ana', points: -1 }).success).toBe(false)
-    expect(
-      ChoreEvent.safeParse({ ...base, type: 'undo', refEventId: 'ev-0', note: 'x'.repeat(141) }).success,
-    ).toBe(false)
+    expect(ChoreEvent.safeParse({ ...base, type: 'complete', taskId: 't', forUid: 'ana', points: -1 }).success).toBe(
+      false,
+    )
+    expect(ChoreEvent.safeParse({ ...base, type: 'undo', refEventId: 'ev-0', note: 'x'.repeat(141) }).success).toBe(
+      false,
+    )
   })
 
   it('parses a sheet row where unused columns are empty strings', () => {
