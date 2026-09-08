@@ -112,10 +112,20 @@ export default tseslint.config(
     },
   },
   {
-    // Node scripts (screenshots, tooling).
+    // Node scripts (screenshots, tooling). Some also pass callbacks into
+    // `page.evaluate`, which run inside the browser page, not Node, hence
+    // the browser globals (navigator, document, fetch) alongside Node's.
     files: ['scripts/**/*.{js,mjs}'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', URL: 'readonly', setTimeout: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+        navigator: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+      },
     },
   },
   configPrettier,

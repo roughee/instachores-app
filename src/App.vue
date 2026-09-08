@@ -8,6 +8,8 @@
  */
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { PhChartBar, PhClockCounterClockwise, PhCookingPot, PhGift, PhListChecks } from '@phosphor-icons/vue'
+import UpdateToast from '@/components/UpdateToast.vue'
+import { usePwa } from '@/composables/usePwa'
 
 interface Tab {
   to: string
@@ -34,6 +36,8 @@ function isActive(to: string): boolean {
 function logKitchenReset(): void {
   router.push('/log/kitchen')
 }
+
+const { needRefresh, reload } = usePwa()
 </script>
 
 <template>
@@ -46,6 +50,8 @@ function logKitchenReset(): void {
     <main class="app-shell__content">
       <RouterView />
     </main>
+
+    <UpdateToast v-if="needRefresh" @reload="reload" />
 
     <nav class="app-shell__tabbar" aria-label="Primary">
       <RouterLink

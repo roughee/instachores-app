@@ -12,6 +12,9 @@ export const Prefs = z.object({
   v: z.literal(1).default(1),
   theme: Theme.default('system'),
   lastTab: z.string().min(1).optional(),
+  /** Set once the user dismisses the "Add to home screen" card (Plan §6.10)
+   * so it never reappears on this device, even after a fresh install prompt. */
+  installCardDismissed: z.boolean().optional(),
 })
 export type Prefs = z.infer<typeof Prefs>
 
