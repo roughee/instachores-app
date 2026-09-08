@@ -194,6 +194,23 @@ describe('sessionStore.ready', () => {
   })
 })
 
+describe('sessionStore.ready and startDemo (#18)', () => {
+  it('startDemo also resolves ready, so a fresh boot straight into demo mode does not hang the router guard forever', async () => {
+    const demoRepo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    configureSession({
+      storage: fakeStorage(),
+      createSheetsRepo: unusedDemo,
+      createDemoRepo: () => demoRepo,
+      now: () => NOW,
+    })
+    const session = useSessionStore()
+
+    await session.startDemo(NOW)
+
+    await expect(session.ready).resolves.toBeUndefined()
+  })
+})
+
 describe('sessionStore.disconnect', () => {
   it('stops the poller, unbinds every store and clears the stored session', async () => {
     const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
@@ -215,23 +232,5 @@ describe('sessionStore.disconnect', () => {
   it('is safe to call when nothing is connected', () => {
     configureSession({ storage: fakeStorage(), createSheetsRepo: unusedDemo, createDemoRepo: unusedDemo })
     expect(() => useSessionStore().disconnect()).not.toThrow()
-  })
-})
-
-describe('session.ready without resume', () => {
-  it('resolves after startDemo, so the router guard never hangs on a demo boot', async () => {
-    configureSession({
-      storage: fakeStorage(),
-      createSheetsRepo: unusedDemo,
-      createDemoRepo: () => new FakeSheetsRepo([{ id: HID, household: household() }]),
-      now: () => NOW,
-    })
-    const session = useSessionStore()
-    await session.startDemo(NOW)
-    const settled = await Promise.race([
-      session.ready.then(() => 'ready'),
-      new Promise((r) => setTimeout(() => r('hung'), 50)),
-    ])
-    expect(settled).toBe('ready')
   })
 })
