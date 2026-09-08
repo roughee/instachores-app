@@ -7,6 +7,7 @@ HomeCrew: a household chores PWA that makes the daily grind count. Two taps to l
 - **Design**: [`docs/design/DESIGN.md`](docs/design/DESIGN.md)
 - **Agent config**: [`docs/agents/`](docs/agents/), skills in [`.claude/skills/`](.claude/skills/)
 - **Testing loop**: [`docs/Testing.md`](docs/Testing.md)
+- **Process**: [`docs/Process.md`](docs/Process.md)
 - **Working rules**: [`CLAUDE.md`](CLAUDE.md)
 
 ```bash

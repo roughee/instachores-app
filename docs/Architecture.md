@@ -131,7 +131,7 @@ function appendEvents({ events }) {
     const fresh = events.filter(ev => !existing.has(ev.id))
     if (fresh.length) sheet.getRange(sheet.getLastRow() + 1, 1, fresh.length, HEADERS.events.length)
       .setValues(fresh.map(ev => toRow('events', { ...ev, loggedAt })))
-    return { appended: fresh.map(ev => ev.id), skipped: events.length - fresh.length, loggedAt }
+    return { appended: fresh.map(ev => ev.id), skipped: events.filter(ev => existing.has(ev.id)).map(ev => ev.id), loggedAt }
   } finally { lock.releaseLock() }
 }
 ```
