@@ -1,1 +1,0 @@
-import{C as e,O as t,P as n,c as r,v as i}from"./index-BMN1U-xu.js";import{t as a}from"./EmptyState-Cn_NrXwZ.js";var o=e({__name:`LogScreen`,setup(e){return(e,o)=>(t(),i(a,{icon:n(r),label:`Log a task in two taps once tasks are loaded.`},null,8,[`icon`]))}});export{o as default};
