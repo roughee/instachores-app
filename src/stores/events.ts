@@ -12,9 +12,9 @@ import { computed, ref } from 'vue'
 import type { HouseholdRepo, Unsubscribe } from '@/data/repo'
 import { mergeEvents } from '@/data/merge'
 import { detectCombos } from '@/domain/combos'
-import { deriveState } from '@/domain/derive'
-import type { Derived } from '@/domain/derive'
-import { DAY_MS, dayKey, startOfMonth } from '@/domain/time'
+import { deriveState, rollupForWeek } from '@/domain/derive'
+import type { Derived, WeekRollup } from '@/domain/derive'
+import { DAY_MS, dayKey, localMidnight, shiftDay, startOfMonth, startOfWeek } from '@/domain/time'
 import { Category, ChoreEvent } from '@/schemas'
 import type { ChoreEvent as ChoreEventT, EventOf } from '@/schemas'
 import { useCatalogStore } from './catalog'
@@ -59,6 +59,21 @@ function startOfPreviousMonth(now: Date, tz: string): Date {
   return startOfMonth(new Date(thisMonth.getTime() - DAY_MS), tz)
 }
 
+/** A safe all-zero `WeekRollup` for before a household has loaded (Overview screen, issue #19). */
+function emptyWeekRollup(now: Date): WeekRollup {
+  return {
+    household: 0,
+    target: 0,
+    byMember: {},
+    byCategory: {},
+    combos: [],
+    start: now,
+    end: now,
+    elapsedDays: 1,
+    proRatedTarget: 0,
+  }
+}
+
 export const useEventsStore = defineStore('events', () => {
   const events = ref<ChoreEventT[]>([])
   /** A coarse "now" the app ticks once a minute (bound below) so week/month
@@ -66,6 +81,8 @@ export const useEventsStore = defineStore('events', () => {
    * fine-grained injected clock directly instead, for the 4 s undo window. */
   const clockNow = ref<Date>(new Date(0))
   const recentlyLogged = ref<RecentlyLogged | undefined>(undefined)
+  /** Overview screen (issue #19): 0 = this week, -1 = previous, ... Never > 0. */
+  const weekOffset = ref(0)
 
   let boundRepo: HouseholdRepo | undefined
   let boundHouseholdId: string | undefined
@@ -97,6 +114,7 @@ export const useEventsStore = defineStore('events', () => {
     boundHouseholdId = undefined
     recentlyLogged.value = undefined
     events.value = []
+    weekOffset.value = 0
   }
 
   /** The single source of truth for every number on screen (Architecture.md §2): the domain's output, not re-derived here. */
@@ -112,6 +130,37 @@ export const useEventsStore = defineStore('events', () => {
       now: clockNow.value,
     })
   })
+
+  /** The Overview screen's week (issue #19, Plan §5.5): `deriveState`'s week
+   * assumes "now", so this calls `rollupForWeek` directly with `weekStart`
+   * shifted by `weekOffset` whole weeks, in the household's own zone. */
+  const weekRollup = computed<WeekRollup>(() => {
+    const householdStore = useHouseholdStore()
+    if (!householdStore.household) return emptyWeekRollup(clockNow.value)
+    const tz = householdStore.household.tz
+    const thisWeekStart = startOfWeek(clockNow.value, tz)
+    const shiftedKey = shiftDay(dayKey(thisWeekStart, tz), 7 * weekOffset.value)
+    const [year, month, day] = shiftedKey.split('-').map(Number) as [number, number, number]
+    const weekStart = localMidnight(year, month, day, tz)
+    const catalogStore = useCatalogStore()
+    return rollupForWeek({
+      events: events.value,
+      tasks: catalogStore.tasks,
+      household: householdStore.household,
+      weekStart,
+      now: clockNow.value,
+    })
+  })
+
+  /** Steps to the previous week; there is no floor. */
+  function prevWeek(): void {
+    weekOffset.value -= 1
+  }
+
+  /** Steps toward the current week; never goes past it (offset 0). */
+  function nextWeek(): void {
+    weekOffset.value = Math.min(0, weekOffset.value + 1)
+  }
 
   function applyLocal(e: ChoreEventT): void {
     events.value = mergeEvents(events.value, [e])
@@ -219,5 +268,5 @@ export const useEventsStore = defineStore('events', () => {
     return { ok: true }
   }
 
-  return { events, recentlyLogged, derived, bind, unbind, complete, undo }
+  return { events, recentlyLogged, derived, weekOffset, weekRollup, bind, unbind, complete, undo, prevWeek, nextWeek }
 })

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRepo } from '@/data/memoryRepo'
 import { deriveState } from '@/domain/derive'
 import { SEED_IDS } from '@/domain/seed'
+import { DAY_MS, startOfWeek } from '@/domain/time'
 import { ChoreEvent } from '@/schemas'
 import { configureSession, useSessionStore } from '@/stores/session'
 import { useCatalogStore } from '@/stores/catalog'
@@ -247,5 +248,54 @@ describe('editing a task does not rewrite history', () => {
     const after = eventsStore.events.find((e): e is typeof before => e.id === before.id && e.type === 'complete')!
     expect(after.points).toBe(2)
     expect(eventsStore.derived.balances[ANA]).toBe(2)
+  })
+})
+
+describe('eventsStore.weekRollup / week navigation (issue #19)', () => {
+  it('defaults to the current week, pro-rated to now', () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    const { eventsStore } = bindAll(repo)
+
+    expect(eventsStore.weekOffset).toBe(0)
+    // NOW is Wednesday (fixtures.ts): 3 days into the week.
+    expect(eventsStore.weekRollup.elapsedDays).toBe(3)
+    expect(eventsStore.weekRollup.start.toISOString()).toBe(startOfWeek(NOW, TZ).toISOString())
+  })
+
+  it('prevWeek steps back and shows that week’s events; nextWeek never passes the current week', async () => {
+    const pots = task({ id: 'task-pots', points: 3 })
+    const weekStart = startOfWeek(NOW, TZ)
+    const lastWeekStart = startOfWeek(new Date(weekStart.getTime() - DAY_MS), TZ)
+    const lastWeekEvent = ChoreEvent.parse({
+      v: 1,
+      id: 'ev-last-week',
+      type: 'complete',
+      actorUid: ANA,
+      at: new Date(lastWeekStart.getTime() + DAY_MS),
+      loggedAt: new Date(lastWeekStart.getTime() + DAY_MS),
+      taskId: 'task-pots',
+      forUid: ANA,
+      points: 3,
+    })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots], events: [lastWeekEvent] }])
+    const { eventsStore } = bindAll(repo)
+
+    expect(eventsStore.weekRollup.household).toBe(0)
+
+    eventsStore.prevWeek()
+    expect(eventsStore.weekOffset).toBe(-1)
+    expect(eventsStore.weekRollup.household).toBe(3)
+
+    eventsStore.nextWeek()
+    eventsStore.nextWeek()
+    expect(eventsStore.weekOffset).toBe(0)
+    expect(eventsStore.weekRollup.household).toBe(0)
+  })
+
+  it('is a safe all-zero shape before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.weekRollup.household).toBe(0)
+    expect(eventsStore.weekRollup.target).toBe(0)
+    expect(eventsStore.weekRollup.byCategory).toEqual({})
   })
 })
