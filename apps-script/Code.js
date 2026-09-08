@@ -97,24 +97,30 @@ function objectToRow(headers, obj) {
   })
 }
 
-/** Reads a whole tab as { headers, objects }. Header-only or empty tabs answer objects: []. */
+/**
+ * Reads a whole tab as { headers, objects, rows }. Blank rows are skipped;
+ * `rows[i]` is the 1-indexed sheet row that `objects[i]` came from, so a
+ * write-back never lands on the wrong row when a blank row sits in between.
+ * Header-only or empty tabs answer objects: [].
+ */
 function readTable(sheet) {
   var lastRow = sheet.getLastRow()
   var lastCol = sheet.getLastColumn()
-  if (lastRow < 1 || lastCol < 1) return { headers: [], objects: [] }
+  if (lastRow < 1 || lastCol < 1) return { headers: [], objects: [], rows: [] }
   var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
-  if (lastRow < 2) return { headers: headers, objects: [] }
+  if (lastRow < 2) return { headers: headers, objects: [], rows: [] }
   var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues()
-  var objects = values
-    .filter(function (row) {
-      return row.some(function (cell) {
-        return cell !== '' && cell !== undefined && cell !== null
-      })
+  var objects = []
+  var rows = []
+  values.forEach(function (row, i) {
+    var blank = !row.some(function (cell) {
+      return cell !== '' && cell !== undefined && cell !== null
     })
-    .map(function (row) {
-      return rowToObject(headers, row)
-    })
-  return { headers: headers, objects: objects }
+    if (blank) return
+    objects.push(rowToObject(headers, row))
+    rows.push(i + 2)
+  })
+  return { headers: headers, objects: objects, rows: rows }
 }
 
 /** Appends objects as new rows below the last row. Returns the first row written, or null if nothing was appended. */
@@ -135,7 +141,7 @@ function appendRowsPlainText(sheet, headers, objects) {
   return startRow
 }
 
-/** Overwrites one existing data row (1-indexed sheet row, i.e. object index + 2) in place. */
+/** Overwrites one existing data row (1-indexed sheet row, from readTable's `rows`) in place. */
 function writeRowAt(sheet, rowIndex, headers, obj) {
   sheet.getRange(rowIndex, 1, 1, headers.length).setValues([objectToRow(headers, obj)])
 }
@@ -247,7 +253,7 @@ function eventsAppend(ctx, params) {
       fresh.push(Object.assign({}, ev, { loggedAt: loggedAt }))
       appended.push(ev.id)
     })
-    if (fresh.length) appendRows(sh, HEADERS.events, fresh)
+    if (fresh.length) appendRowsPlainText(sh, HEADERS.events, fresh)
     return { appended: appended, skipped: skipped, loggedAt: loggedAt }
   } finally {
     lock.releaseLock()
@@ -268,7 +274,7 @@ function genericUpsert(ctx, tabName, incoming) {
     }
   }
   if (idx === -1) {
-    appendRows(sh, headers, [incoming])
+    appendRowsPlainText(sh, headers, [incoming])
     return incoming
   }
   var existing = table.objects[idx]
@@ -277,7 +283,7 @@ function genericUpsert(ctx, tabName, incoming) {
   if (!isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt.getTime() < existingUpdatedAt.getTime()) {
     throw apiError('conflict', 'stale updatedAt for ' + incoming.id)
   }
-  writeRowAt(sh, idx + 2, headers, incoming)
+  writeRowAt(sh, table.rows[idx], headers, incoming)
   return incoming
 }
 
@@ -439,7 +445,6 @@ function test_() {
       ['ana', 'Ana', '#1f8a70', 'adult'],
       ['ben', 'Ben', '#3f6fd4', 'adult'],
     ])
-    PropertiesService.getScriptProperties().setProperty('SECRET_TEST_SCRATCH', 'scratch-secret')
     var ctx = {
       sheet: function (name) {
         var sh = ss.getSheetByName(name)

@@ -390,3 +390,51 @@ describe('module shape', () => {
     )
   })
 })
+
+describe('sheet row bookkeeping', () => {
+  const blankRow = TASKS_HEADERS.map(() => '')
+  const pots = ['1', 'task-pots', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana']
+
+  it('tasks.upsert writes back to the right sheet row when a blank row sits above the target', () => {
+    const { HomeCrew, ctx, ss } = makeWorld({ tasks: [TASKS_HEADERS, blankRow, pots] })
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, {
+        secret: SECRET,
+        action: 'tasks.upsert',
+        task: {
+          v: 1,
+          id: 'task-pots',
+          name: 'Pots (renamed)',
+          category: 'kitchen',
+          points: 2,
+          freq: 'daily',
+          forRole: 'adult',
+          archived: false,
+          sort: 0,
+          updatedAt: '2026-09-02T00:00:00.000Z',
+          updatedBy: 'ben',
+        },
+      }),
+    )
+    expect(res.ok).toBe(true)
+    const rows = ss.getSheetByName('tasks')!.snapshot()
+    expect(rows[1]).toEqual(blankRow)
+    expect(rows[2]![2]).toBe('Pots (renamed)')
+  })
+
+  it('events.append and upserts mark the rows they write as plain text', () => {
+    const { HomeCrew, ctx, ss } = makeWorld()
+    HomeCrew.handleRequest(ctx, {
+      secret: SECRET,
+      action: 'events.append',
+      events: [{ v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: '2026-09-09T18:00:00.000Z', taskId: 'task-pots', forUid: 'ana', points: 2 }],
+    })
+    HomeCrew.handleRequest(ctx, {
+      secret: SECRET,
+      action: 'tasks.upsert',
+      task: { v: 1, id: 'task-new', name: 'New', category: 'kitchen', points: 1, freq: 'daily', forRole: 'adult', archived: false, sort: 0, updatedAt: '2026-09-02T00:00:00.000Z', updatedBy: 'ana' },
+    })
+    expect(ss.getSheetByName('events')!.formats).toContainEqual(expect.objectContaining({ row: 2, format: '@' }))
+    expect(ss.getSheetByName('tasks')!.formats).toContainEqual(expect.objectContaining({ row: 2, format: '@' }))
+  })
+})
