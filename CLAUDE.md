@@ -7,9 +7,20 @@ Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite,
 - `docs/Plan.md`: product plan, task catalog, architecture summary, process, roadmap.
 - `docs/Architecture.md`: layers, data flow, sheet layout, Apps Script API, sync and offline, identity, deploy, testing map.
 - `docs/adr/`: architecture decision records. ADR-0001 is the Google Sheet data layer.
+- `docs/Testing.md`: the testing loop, coverage gates, fixture rules, mutation checks.
 - `docs/design/DESIGN.md`: design read, dials, color tokens, components, dark-mode protocol, UI pre-flight.
 - `docs/agents/`: per-repo configuration read by the engineering skills.
 - `.claude/skills/`: vendored skills (see below).
+
+## Commands
+
+```bash
+npm run test:watch   # the loop: Vitest in watch mode
+npm run check        # what CI runs: vue-tsc, then vitest with coverage gates
+npm test             # one run, no coverage
+```
+
+`docs/Testing.md` describes the red-green-refactor loop, the coverage gates (100% lines on `src/domain/` and `src/schemas/`), the fixture helpers, and how to prove a test can fail.
 
 ## Working rules (Plan §7)
 

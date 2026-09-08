@@ -512,7 +512,7 @@ Swap `SheetsRepo` for a `FirestoreRepo` or `SupabaseRepo` later and nothing abov
 ```ts
 import { z } from 'zod'
 
-export const Id = z.string().uuid()
+export const Id = z.string().min(1).max(128)   // uuid from the app; stable slugs for seeds; combo-{key}-{day}-{hid} for bonuses
 export const Category = z.enum(['kitchen','laundry','floors','bathroom','kids','home','admin','kid'])
 export const Freq = z.enum(['daily','weekly','biweekly','monthly','quarterly','adhoc'])
 
@@ -529,6 +529,7 @@ export const Household = z.object({
   id: Id,
   name: z.string(),
   weeklyTarget: z.number().int().positive(),
+  tz: z.string(),                   // IANA zone; weeks start Monday 00:00 here
   members: z.record(z.string(), Member),
   createdAt: z.coerce.date(),
 })
@@ -624,7 +625,7 @@ For ~40 events/day, a month is ~1,200 rows and a year ~15,000, which Sheets hand
 `src/domain/derive.ts` — pure, tested, framework-free:
 
 ```ts
-export function deriveState(events: ChoreEvent[], tasks: Task[], rewards: Reward[], now: Date): Derived
+export function deriveState({ events, tasks, rewards, household, now }: DeriveInput): Derived
 ```
 
 returns
@@ -632,6 +633,7 @@ returns
 ```ts
 interface Derived {
   balances: Record<uid, number>         // complete + kudos + bonus + adjust − acknowledged claims
+  stars: Record<uid, number>            // kid stars; a separate economy
   pooled: number
   week:  Rollup   // Mon 00:00 local → now
   month: Rollup
@@ -649,13 +651,13 @@ interface Rollup {
 }
 ```
 
-Rules that live only here: undo cancels its ref event; a `bonus` event is emitted client-side by `combos.ts` when the day's completes satisfy a combo (idempotent per `combo+day`, so two phones racing produce one bonus thanks to a deterministic id `hash(combo, day, hid)`); kid tasks accrue stars, not points.
+Rules that live only here: undo cancels its ref event; a `bonus` event is emitted client-side by `combos.ts` when the day's completes satisfy a combo (idempotent per `combo+day`, so two phones racing produce one bonus thanks to a deterministic id `combo-{key}-{day}-{hid}`); kid tasks accrue stars, not points.
 
 ### 6.8 Sync & conflict handling
 
 - **Events** are append-only with client-generated UUIDs, so two phones never conflict. Both offline for a day, both come back, the sheet ends up with both sets. The script appends under `LockService` and skips any id already present, so a retried request cannot double-log.
 - **Undo** is itself an event (`type: 'undo'`, `refEventId`), so it merges cleanly.
-- **Combo bonuses** use deterministic ids (`combo-{day}-{hid}`), so if both phones emit the same bonus the second append is a no-op, not a double bonus.
+- **Combo bonuses** use deterministic ids (`combo-{key}-{day}-{hid}`), so if both phones emit the same bonus the second append is a no-op, not a double bonus.
 - **Catalog** edits (tasks, rewards) are last-write-wins on `updatedAt`, enforced by the script: an older `updatedAt` is rejected and the client re-pulls. The UI shows "edited by B, 2 min ago" so silent overwrites are visible. Edits made directly in the spreadsheet are picked up on the next poll like any other change.
 - **Offline**: every write goes to an **outbox** in IndexedDB first and is applied to local state immediately; the household bar never waits. `syncStore` flushes the outbox whenever the app is online, in order, and removes an entry only after the script confirms it. The last-known snapshot (events since the previous month, tasks, rewards, household) is cached in IndexedDB so the app opens with data in airplane mode.
 - **Polling**: `SheetsRepo` polls `events since <last loggedAt>` every 30 s while the app is visible, plus immediately on `visibilitychange`, on `online`, and after every outbox flush. A partner's tap shows up within about 30 s, or instantly when you open the app. `syncStore` exposes `online`, `outboxCount`, `lastPollAt` for the status dot.
