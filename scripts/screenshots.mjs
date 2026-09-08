@@ -72,6 +72,45 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   console.log(`saved 11-install-card-${scheme}.png`)
 }
 
+// Issue #17: Log screen (household bar, quick row, category grid, toast).
+// `?demo=1` starts a `MemoryRepo` demo household with no network (main.ts);
+// `?demoLogs=N` then completes the first N quick-row tasks so the "after
+// logging" shot has data. `MemoryRepo` never loses a real connection, so the
+// offline shot also forces the sync store's status (`forceOffline`,
+// `demoOutbox`) alongside a real `context.setOffline(true)` for the network.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/log`, { waitUntil: 'networkidle' })
+  await page.getByText('You today').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}17-log-empty-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 17-log-empty-${scheme}.png`)
+}
+
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3#/log`, { waitUntil: 'networkidle' })
+  await page.getByText('You today').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}17-log-logged-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 17-log-logged-${scheme}.png`)
+}
+
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  const page = await context.newPage()
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=1&forceOffline=1&demoOutbox=3#/log`, { waitUntil: 'networkidle' })
+  await page.getByText('waiting to sync').waitFor()
+  await context.setOffline(true)
+  await page.screenshot({ path: `${OUT_DIR}17-log-offline-${scheme}.png` })
+  await context.setOffline(false)
+  await browser.close()
+  console.log(`saved 17-log-offline-${scheme}.png`)
+}
+
 // Issue #16: the Welcome / Connect screen, fresh (no stored session, so the
 // router guard lets it through on its own).
 for (const scheme of /** @type {const} */ (['light', 'dark'])) {
