@@ -112,6 +112,7 @@ export const useSessionStore = defineStore('session', () => {
     bindRepo(sheetsRepo, household.id)
     memberUid.value = uid
     mode.value = 'sheets'
+    markReady()
     const session = Session.parse({ v: 1, link, householdId: household.id, memberUid: uid })
     opts.storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
     sheetsRepo.start()

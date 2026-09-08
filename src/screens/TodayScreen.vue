@@ -30,7 +30,7 @@ function memberName(uid: string): string {
 }
 
 function memberColor(uid: string): string {
-  return householdStore.household?.members[uid]?.color ?? '#6b6f7a'
+  return householdStore.household?.members[uid]?.color ?? 'var(--text-2)'
 }
 
 function timeLabel(at: Date): string {
@@ -45,7 +45,7 @@ const items = computed<FlatItem[]>(() => {
   for (const row of eventsStore.todayRows) {
     if (row.hourKey !== currentHour) {
       currentHour = row.hourKey
-      out.push({ kind: 'header', key: `hour-${row.hourKey}-${row.eventId}`, hourKey: row.hourKey })
+      out.push({ kind: 'header', key: `hour-${row.hourKey}`, hourKey: row.hourKey })
     }
     out.push({ kind: 'row', key: row.eventId, row })
   }
