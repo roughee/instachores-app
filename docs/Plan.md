@@ -1,7 +1,9 @@
 # HomeCrew — Household Chores PWA
 
 *Plan, product design, and technical architecture*
-*Draft v0.5 — September 2026*
+*Draft v0.6 — September 2026*
+
+*v0.6: the MVP data layer is a shared Google Sheet behind an Apps Script web app (ADR-0001, `docs/Architecture.md`). Firestore moves to the upgrade path.*
 
 ---
 
@@ -38,7 +40,7 @@ So the goal of the app is **not** "gamify chores." It is:
 ## 2. Household model
 
 ```
-Household "Home" (join code: 6 letters)
+Household "Home" (= one shared Google Sheet; each phone connects with a setup link)
  ├── Adult A  (full account)
  ├── Adult B  (full account)
  ├── Kid (5)  (star mode, logged by an adult, own tiny reward list)
@@ -317,11 +319,11 @@ Contrast is checked in CI with a tiny Vitest that runs WCAG contrast math over t
 
 Each page lists purpose, layout, states, and the acceptance criteria that become its test cases. Routes are hash routes.
 
-#### `#/welcome` Welcome / Join
-- **Purpose**: first run. Create a household or join with a code.
-- **Layout**: app name, one sentence ("Make the daily grind count"), two big buttons: *Create household* / *I have a code*. Below the fold: a "Try the demo" link that loads `MemoryRepo` with seed data.
-- **States**: offline (creating requires network; explain and offer demo), invalid code, code already used by this device.
-- **Acceptance**: entering a valid code adds this uid to `members` and routes to `#/log`; invalid code shows inline error without leaving the screen; demo never writes to Firestore.
+#### `#/welcome` Welcome / Connect
+- **Purpose**: first run. Connect this phone to the household sheet, or try the demo.
+- **Layout**: app name, one sentence ("Make the daily grind count"), one big field for the **setup link** (pasted, or pre-filled when the link itself was opened) and a *Connect* button, then "Who are you?" with one button per member from the sheet. Below the fold: a "Try the demo" link that loads `MemoryRepo` with seed data.
+- **States**: offline (connecting requires network; explain and offer demo), invalid link or wrong secret (the script answers 401), member already claimed by another phone (warn, allow).
+- **Acceptance**: a valid setup link stores the endpoint and secret on this device, loads the household, and routes to `#/log`; a wrong secret shows an inline error without leaving the screen and stores nothing; demo never calls the network.
 
 #### `#/log` Log (home)
 - **Purpose**: log a task in two taps.
@@ -360,7 +362,7 @@ Each page lists purpose, layout, states, and the acceptance criteria that become
 
 #### `#/settings` Settings
 - **Purpose**: everything that is not daily.
-- **Layout**: sections: Household (name, join code with copy button, members, colors) · Tasks (list with search, edit, archive, reorder, points) · Rewards · Weekly target · Appearance (system / light / dark) · Sync panel (online, pending writes, last sync, uid, SW version, "Reconnect") · Data (export JSON, import JSON, reset with typed confirmation) · About.
+- **Layout**: sections: Household (name, setup link with copy button, members, colors) · Tasks (list with search, edit, archive, reorder, points) · Rewards · Weekly target · Appearance (system / light / dark) · Sync panel (online, outbox count, last poll, member, script version, SW version, "Sync now") · Data (export JSON, import JSON, reset with typed confirmation) · About.
 - **Acceptance**: editing a task's points does not change historical events; import of a bad file shows Zod issues line by line; reset requires typing the household name.
 
 #### Sheets (not routes)
@@ -389,9 +391,9 @@ Dual-mode from the first commit, following Taste Skill §8: semantic tokens only
 
 - **PWA** built with **Vue 3 + TypeScript + Vite**, hosted on **GitHub Pages** (static). Installable on Android via "Add to Home screen"; full-screen, own icon, works offline.
 - **Local-first**: the UI reads and writes a local store first; the network is a background concern. Nothing in the app ever waits on a request.
-- **Sync** via **Firebase Firestore** (free tier). GitHub Pages can't sync anything by itself — it's just files — so this one external piece is unavoidable if two phones are to share data.
+- **Sync** via a **shared Google Sheet** behind a small Apps Script web app (both free). GitHub Pages can't sync anything by itself, it's just files, so one external piece is unavoidable if two phones are to share data. The sheet doubles as the admin UI: the task catalog and point values are edited in the spreadsheet itself. Decision in ADR-0001; mechanics in `docs/Architecture.md`.
 - **Event-sourced**: completions, undos, kudos and reward claims are append-only events. Points, balances and stats are *derived* from events by pure functions. This makes sync conflict-free, undo trivial, and history honest.
-- **Typed end-to-end with Zod**: every piece of data crossing a boundary (Firestore ↔ app, localStorage ↔ app, import file ↔ app) is parsed through a Zod schema. TypeScript types are inferred from the schemas, so there is exactly one source of truth for shape.
+- **Typed end-to-end with Zod**: every piece of data crossing a boundary (sheet ↔ app, IndexedDB ↔ app, localStorage ↔ app, import file ↔ app) is parsed through a Zod schema. TypeScript types are inferred from the schemas, so there is exactly one source of truth for shape.
 
 ### 6.2 What makes a good PWA architecture
 
@@ -402,14 +404,14 @@ A PWA is just a website with three promises: it installs, it works offline, and 
 | **App shell, precached** | HTML/JS/CSS/icons/fonts are precached by the service worker. The app opens instantly from the home screen even in airplane mode. Data is loaded separately from the shell. |
 | **Local-first, not offline-tolerant** | Reads come from local storage; writes go to local storage and are queued. Sync is a background process that reconciles. "Offline" is not a mode — it's the default that the network occasionally improves. |
 | **Append-only events, derived state** | Two phones both offline for a day can never conflict if all they do is append events with unique IDs. Balances, streaks, and charts are pure functions over the event list — no stored counters that can drift. |
-| **Pure domain core** | Points rules, combo detection, week/month rollups live in plain TypeScript with zero imports from Vue or Firebase. This is the part with unit tests, and it's the part you'll tweak most. |
+| **Pure domain core** | Points rules, combo detection, week/month rollups live in plain TypeScript with zero imports from Vue or the data layer. This is the part with unit tests, and it's the part you'll tweak most. |
 | **Validate at the boundaries** | Anything from the network, disk, or a user-supplied file is `schema.parse()`d before it touches the domain. Inside the boundary, types are trusted. A corrupted doc or an old-version event fails loudly in dev, and is skipped-with-log in prod, instead of silently producing NaN points. |
-| **Small bundle, fast paint** | Target < 150 KB gzipped total including Firebase (which is the heavy part — import only `firebase/app`, `firebase/auth`, `firebase/firestore`). Route-level code splitting. No UI framework CSS. |
+| **Small bundle, fast paint** | Target < 80 KB gzipped total. No backend SDK: the data layer is `fetch` plus a few hundred lines of repo code. Route-level code splitting. No UI framework CSS. |
 | **Static-host friendly routing** | GitHub Pages has no server rewrites, so use **hash routing** (`/#/log`). A refresh on `/week` would 404; `/#/week` never does. |
 | **Safe service-worker updates** | `registerType: 'prompt'` — the new SW waits; the app shows "Update available → Reload." Auto-updating mid-tap is how you lose an event. |
-| **Security in rules, not secrets** | The Firebase config in the bundle is public by design. Access is enforced by Firestore Security Rules keyed on `auth.uid` ∈ `members`. Never rely on obscurity. |
+| **Secret on the device, not in the bundle** | The bundle is public. The only secret, the household's API key, arrives once via the setup link and lives in the phone's storage; the Apps Script rejects requests without it. This is obscurity-grade security, which is the right grade for two people's chore log (ADR-0001). |
 | **Native feel** | 48 px touch targets, haptic tick on log, safe-area insets, `theme_color` matching the shell, no 300 ms tap delay (Vite default viewport meta handles this), transitions ≤ 150 ms, dark mode via `prefers-color-scheme`. |
-| **Observable enough** | A tiny in-app "Sync" panel: last sync time, pending writes count, SW version, current uid. Solves 90% of "why isn't it showing on your phone?" without a debugger. |
+| **Observable enough** | A tiny in-app "Sync" panel: last poll time, outbox count, script version, SW version, current member. Solves 90% of "why isn't it showing on your phone?" without a debugger. |
 
 ### 6.3 The sync question (two phones, one household)
 
@@ -417,15 +419,17 @@ GitHub Pages serves static files only; there is no server, no database, no auth.
 
 | Option | Cost | Real-time | Effort | Verdict |
 |---|---|---|---|---|
-| **Firebase Firestore** (Spark free tier) | Free at this scale (50k reads/day) | Yes, live listeners | Low — SDK from npm, works from static hosting, has its own offline queue | ✅ **Recommended** |
-| **Supabase** (free tier) | Free | Yes (Realtime channel) | Low–medium — Postgres tables, RLS policies; no built-in offline queue (you'd add Dexie + your own outbox) | ✅ Good alternative if you prefer SQL / open source |
-| **PocketBase** on a tiny VPS | ~€3–5/mo | Yes | Medium — you run a server | Fine if you already have a box |
-| **GitHub repo as DB** (fine-grained PAT, write `data.json` via GitHub API) | Free | No — poll every ~30 s | Medium, hacky | ⚠️ Works, but: token on device, rate limits, JSON merge conflicts, deploy lag. Only for "I refuse to have any other account" |
+| **Google Sheet + Apps Script web app** | Free | No: poll every 30 s and on app focus | Low: ~150 lines of Apps Script, a `fetch`-based repo, a small outbox | ✅ **MVP choice** (ADR-0001). Two users, data visible and editable in a spreadsheet, no extra accounts |
+| **Firebase Firestore** (Spark free tier) | Free at this scale (50k reads/day) | Yes, live listeners | Low: SDK from npm, works from static hosting, has its own offline queue | ✅ The upgrade path if live updates or more than a handful of users ever matter |
+| **Supabase** (free tier) | Free | Yes (Realtime channel) | Low to medium: Postgres tables, RLS policies; no built-in offline queue (you'd keep the outbox) | ✅ Alternative upgrade path if you prefer SQL / open source |
+| **PocketBase** on a tiny VPS | ~€3-5/mo | Yes | Medium: you run a server | Fine if you already have a box |
+| **Excel file (.xlsx) in Drive** | Free | No | Medium, fragile | ❌ No row-level API: every write is download, edit, re-upload the whole file; two phones clobber each other |
+| **GitHub repo as DB** (fine-grained PAT, write `data.json` via GitHub API) | Free | No: poll every ~30 s | Medium, hacky | ⚠️ Works, but: token on device, rate limits, JSON merge conflicts, deploy lag |
 | **Manual**: export/import JSON, share via chat | Free | No | Trivial | Fallback only; you'll stop doing it in a week |
 | **WebRTC peer-to-peer** | Free | Only when both phones are online at once | High | ❌ Not for this |
-| **Cloudflare Worker + D1/KV** | Free tier | Poll or Durable Objects | Medium | Solid if you know Workers; more plumbing than Firestore |
+| **Cloudflare Worker + D1/KV** | Free tier | Poll or Durable Objects | Medium | Solid if you know Workers; more plumbing than either of the top two |
 
-**Decision: Firestore.** Its SDK already does the hard part of local-first — an IndexedDB cache, an offline write queue, and live listeners that fire from cache first and then from the server. That removes an entire sync engine from the project.
+**Decision: a shared Google Sheet for the MVP.** With two users, what Firestore buys (live listeners, a built-in offline queue, per-user security rules) is worth less than what a spreadsheet buys: both partners can see and edit the data, point values included, in a tool they already use, and the Phase 0 "agree the rules" session happens directly in the sheet. The event-sourced model is what makes a spreadsheet safe as a store: the `events` tab is append-only, one row per event, deduplicated by id. What Firestore did for free we write ourselves, and it is small: an outbox in IndexedDB that replays on reconnect, and a poll every 30 s. The `HouseholdRepo` interface is the seam; swapping `SheetsRepo` for a `FirestoreRepo` later touches nothing above it. Full mechanics in `docs/Architecture.md`.
 
 ### 6.4 Stack
 
@@ -438,8 +442,8 @@ GitHub Pages serves static files only; there is no server, no database, no auth.
 | Router | **vue-router** in `createWebHashHistory()` mode | Hash routing for GitHub Pages |
 | Utilities | **VueUse** | `useOnline`, `useVibrate`, `usePreferredDark`, `useIntervalFn`, `useSwipe` — avoids hand-rolling browser glue |
 | Validation / types | **Zod** | One schema per entity; `z.infer` for types; `safeParse` at every boundary; versioned schemas for migrations |
-| Data | **Firebase** (`firebase/app`, `auth`, `firestore` with `persistentLocalCache`) | Modular v10+ SDK, tree-shakeable |
-| Local extras | `localStorage` via VueUse `useStorage` (with Zod) for tiny UI prefs only | Household id, last tab, theme |
+| Data | **Google Sheet** behind a bound **Apps Script** web app; client side is `fetch` inside `SheetsRepo` | No SDK; JSON over HTTPS; script deployed with `clasp` (ADR-0001) |
+| Local extras | **idb-keyval** for the outbox and the last-known snapshot (events, tasks, rewards); `localStorage` via VueUse `useStorage` (with Zod) for tiny UI prefs only | Endpoint + secret, member id, last tab, theme |
 | PWA | **vite-plugin-pwa** (Workbox) | Manifest generation, precache manifest, `prompt` update strategy |
 | Styling | Plain CSS + semantic custom properties (`tokens.css`), scoped in SFCs | Token strategy per Taste Skill §8.A; light + dark from day one; no framework CSS |
 | Icons | `@phosphor-icons/vue` (one family, weight regular) | Taste Skill icon rule; no hand-drawn SVG icons, no emoji as icons |
@@ -451,7 +455,7 @@ GitHub Pages serves static files only; there is no server, no database, no auth.
 | Quality | ESLint (`eslint-plugin-vue` + `@typescript-eslint`), Prettier, `vue-tsc --noEmit` in CI | Type-check SFC templates too |
 | Deploy | **GitHub Actions** → `gh-pages` branch | Push to `main` = deployed |
 
-Not chosen and why: Nuxt (SSR is pointless on a static host and adds weight), Vuetify/Quasar (heavy; this app has ~8 components), Dexie in v1 (Firestore's cache covers it; revisit only if you want a fully backend-independent mode).
+Not chosen and why: Nuxt (SSR is pointless on a static host and adds weight), Vuetify/Quasar (heavy; this app has ~8 components), Firebase in v1 (see ADR-0001: nothing it adds is needed for two users), Dexie (idb-keyval is enough for an outbox and one snapshot; revisit only if queries over local data are ever needed).
 
 ### 6.5 Layered architecture
 
@@ -465,7 +469,7 @@ Not chosen and why: Nuxt (SSR is pointless on a static host and adds weight), Vu
 │                syncStore — hold parsed data, expose getters   │
 │                that call the domain layer                     │
 ├───────────────────────────────────────────────────────────────┤
-│  Domain        Pure TypeScript, no Vue, no Firebase           │
+│  Domain        Pure TypeScript, no Vue, no fetch              │
 │                derive.ts (balances, rollups, streaks)         │
 │                combos.ts (Kitchen Reset, Full bathroom)       │
 │                schedule.ts (what's "due")                     │
@@ -474,7 +478,7 @@ Not chosen and why: Nuxt (SSR is pointless on a static host and adds weight), Vu
 │  Schemas       Zod: Task, Reward, Event, Household, Member    │
 │                + z.infer types + version migrations           │
 ├───────────────────────────────────────────────────────────────┤
-│  Data          Repository interface + FirestoreRepo           │
+│  Data          Repository interface + SheetsRepo              │
 │                (and MemoryRepo for tests/demo mode)           │
 │                every read → schema.safeParse; every write     │
 │                → schema.parse before send                     │
@@ -494,12 +498,12 @@ export interface HouseholdRepo {
   appendEvent(id: string, e: ChoreEvent): Promise<void>
   upsertTask(id: string, t: Task): Promise<void>
   upsertReward(id: string, r: Reward): Promise<void>
-  createHousehold(h: Household, code: string): Promise<void>
-  joinByCode(code: string, member: Member): Promise<string> // returns householdId
+  connect(link: SetupLink): Promise<Household>   // validates endpoint + secret, returns the household
+  sync(): Promise<SyncResult>                     // flush outbox, poll new rows; no-op for MemoryRepo
 }
 ```
 
-Swap `FirestoreRepo` for `SupabaseRepo` later and nothing above the line changes. `MemoryRepo` powers a "demo household" on the landing page and every domain test.
+Swap `SheetsRepo` for a `FirestoreRepo` or `SupabaseRepo` later and nothing above the line changes. `SheetsRepo` polls, a Firestore repo would push; the `watch*` callbacks hide the difference. `MemoryRepo` powers a "demo household" on the landing page and every domain test.
 
 ### 6.6 Data model with Zod schemas
 
@@ -594,25 +598,26 @@ export const Backup = z.object({
 
 How Zod is used at each boundary:
 
-- **Firestore → app**: `onSnapshot` docs go through `ChoreEvent.safeParse`. Failures are logged with the doc id and skipped (never crash the UI over one bad doc). In dev, a failure throws.
-- **App → Firestore**: `ChoreEvent.parse(evt)` right before `setDoc`. Dates are converted to Firestore `Timestamp` in the repo, never in the domain.
+- **Sheet → app**: every row the script returns goes through `ChoreEvent.safeParse` (or `Task` / `Reward`). Failures are logged with the row's id and skipped (never crash the UI over one bad row). In dev, a failure throws.
+- **App → sheet**: `ChoreEvent.parse(evt)` right before the event is queued in the outbox. Dates travel as ISO strings and the sheet's columns are formatted as plain text, so nothing is reinterpreted as a spreadsheet date.
 - **Backup import**: `Backup.safeParse(JSON.parse(file))` → show a readable error list from `ZodError.issues` instead of "import failed".
 - **localStorage prefs**: `useStorage('prefs', defaults, { serializer: zodSerializer(Prefs) })`.
 - **Migrations**: `v` is a literal per version. `migrate.ts` has `v0 → v1` transforms; the repo runs `z.union([TaskV1, TaskV0.transform(upgrade)])` so old docs keep parsing after a schema change.
 
 Why snapshot `points` on the event: if you re-price "pans" from 2 to 3 next month, last month's history stays true.
 
-Firestore layout:
+Sheet layout (one spreadsheet = one household; one tab per entity; header row = field names; one row per record; full column list in `docs/Architecture.md`):
 
 ```
-households/{hid}                      Household
-households/{hid}/tasks/{taskId}       Task
-households/{hid}/rewards/{rewardId}   Reward
-households/{hid}/events/{eventId}     ChoreEvent   (append-only)
-codes/{code}                          { householdId }   (join codes)
+household   key | value                  name, weeklyTarget, tz, createdAt, v
+members     uid | name | color | role    two adults + kid; uid is a short slug ("ana", "ben", "mia")
+tasks       one row per Task             columns = Task fields; edit points here, together
+rewards     one row per Reward           columns = Reward fields
+events      one row per ChoreEvent       append-only; columns = union of all event fields; loggedAt stamped by the script
+```
 ```
 
-For ~40 events/day, a month is ~1,200 small docs — trivial. The client subscribes to `events where at >= startOf(previousMonth)` and derives everything in memory; older months load on demand for the Month view.
+For ~40 events/day, a month is ~1,200 rows and a year ~15,000, which Sheets handles comfortably. The client asks the script for `events since <loggedAt>` on every poll, so a steady-state poll returns a handful of rows. On first connect it loads from the start of the previous month; older months load on demand for the Month view.
 
 ### 6.7 Domain layer: derive
 
@@ -648,55 +653,31 @@ Rules that live only here: undo cancels its ref event; a `bonus` event is emitte
 
 ### 6.8 Sync & conflict handling
 
-- **Events** are append-only with client-generated UUIDs → two phones never conflict. Both offline for a day, both come back, Firestore ends up with both sets.
+- **Events** are append-only with client-generated UUIDs, so two phones never conflict. Both offline for a day, both come back, the sheet ends up with both sets. The script appends under `LockService` and skips any id already present, so a retried request cannot double-log.
 - **Undo** is itself an event (`type: 'undo'`, `refEventId`), so it merges cleanly.
-- **Combo bonuses** use deterministic ids (`combo-{day}-{hid}`) so duplicate emission is an idempotent overwrite, not a double bonus.
-- **Catalog** edits (tasks, rewards) are last-write-wins on `updatedAt`; the UI shows "edited by B, 2 min ago" so silent overwrites are visible.
-- **Offline**: Firestore's `persistentLocalCache` queues writes and replays them; `onSnapshot` fires from cache first (`metadata.fromCache`), so the UI never waits. `syncStore` exposes `online`, `pendingWrites`, `lastSyncAt` for the status icon.
-- **Time**: `at` is the phone's local time for the deed; `loggedAt` uses `serverTimestamp()`. Week boundaries are Monday 00:00 in the household's timezone (stored on Household; both phones in the same house, so one tz).
+- **Combo bonuses** use deterministic ids (`combo-{day}-{hid}`), so if both phones emit the same bonus the second append is a no-op, not a double bonus.
+- **Catalog** edits (tasks, rewards) are last-write-wins on `updatedAt`, enforced by the script: an older `updatedAt` is rejected and the client re-pulls. The UI shows "edited by B, 2 min ago" so silent overwrites are visible. Edits made directly in the spreadsheet are picked up on the next poll like any other change.
+- **Offline**: every write goes to an **outbox** in IndexedDB first and is applied to local state immediately; the household bar never waits. `syncStore` flushes the outbox whenever the app is online, in order, and removes an entry only after the script confirms it. The last-known snapshot (events since the previous month, tasks, rewards, household) is cached in IndexedDB so the app opens with data in airplane mode.
+- **Polling**: `SheetsRepo` polls `events since <last loggedAt>` every 30 s while the app is visible, plus immediately on `visibilitychange`, on `online`, and after every outbox flush. A partner's tap shows up within about 30 s, or instantly when you open the app. `syncStore` exposes `online`, `outboxCount`, `lastPollAt` for the status dot.
+- **Time**: `at` is the phone's local time for the deed; `loggedAt` is stamped by the script when the row is appended and is the cursor for polling. Week boundaries are Monday 00:00 in the household's timezone (stored on the household tab; both phones in the same house, so one tz).
 
-### 6.9 Auth & security
+### 6.9 Identity & security
 
-- **Firebase Anonymous Auth**: each phone gets a stable `uid` with no signup. Optional later: link to Google so a lost phone doesn't lose identity.
-- **Join flow**: A creates household → app writes `codes/{ABCDEF} = { householdId }` → B enters code → B reads `codes/ABCDEF`, then writes themself into `households/{hid}.members[uid]`. Rules allow a user to add *only their own uid*, and only if the code doc matches.
-- **Security rules** (sketch):
-
-```
-match /households/{hid} {
-  function isMember() { return request.auth != null && request.auth.uid in resource.data.members; }
-  function joiningSelf() {
-    return request.auth != null
-      && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]);
-  }
-  allow read: if isMember();
-  allow update: if isMember() || joiningSelf();
-  allow create: if request.auth != null && request.auth.uid in request.resource.data.members;
-
-  match /events/{eid} {
-    allow read: if isMember();
-    allow create: if isMember()
-      && request.resource.data.actorUid == request.auth.uid
-      && request.resource.data.points <= 50;
-    allow update, delete: if false;          // append-only, enforced server-side
-  }
-  match /{sub}/{doc} { allow read, write: if isMember(); }   // tasks, rewards
-}
-match /codes/{code} {
-  allow read, create: if request.auth != null;
-  allow update, delete: if false;
-}
-```
-
-- Nothing sensitive is stored. Turn on **App Check** later if you want to block random clients; not needed for two phones.
+- **No accounts.** The household is the sheet. Each phone stores three things: the script URL, the household **secret**, and which member it is. All three come from the **setup link** the first phone generates in Settings (`https://<user>.github.io/homecrew/#/welcome?s=<base64 of {url, secret}>`) and shares with the other phone over any private channel.
+- **Member identity** is self-declared: on connect you pick your name from the members tab and the phone remembers it. There is nothing to protect against between two partners; the choice exists for attribution, not access control.
+- **Secret check**: the Apps Script compares the `secret` in every request against a value in its Script Properties and answers 401 otherwise. The secret never appears in the repo or the bundle. Rotating it means editing one property and re-sharing the setup link.
+- **Script deployment**: "Execute as me" (the sheet owner), access "Anyone". The script is the only path into the sheet from the app; the sheet itself is shared with the other partner as an editor so both can edit the catalog by hand.
+- **Append-only** is enforced by the script's API surface: there is no action that edits or deletes an event row. Editing history by hand in the sheet stays possible and is treated as a feature (fix a mistyped point value), with the Zod parse as the guard against broken rows.
+- **Threat model**: someone who obtains the URL and the secret could read or add chore events. Nothing sensitive is stored. This is the accepted trade-off of ADR-0001; the upgrade path (Firestore with per-user rules) exists if it ever stops being acceptable.
 
 ### 6.10 PWA specifics for Android
 
 - `manifest.webmanifest`: `display: standalone`, `theme_color`/`background_color` = shell dark, maskable 512 px icon, `start_url: "./#/log"`, `shortcuts` (Android long-press icon: "Kitchen Reset", "Log trash", "Laundry").
-- Service worker (`vite-plugin-pwa`): precache shell; `registerType: 'prompt'`; runtime `CacheFirst` for fonts/icons. Firestore traffic is not intercepted — the SDK owns its cache.
+- Service worker (`vite-plugin-pwa`): precache shell; `registerType: 'prompt'`; runtime `CacheFirst` for fonts/icons. Requests to the Apps Script URL are `NetworkOnly`: the repo owns its cache and its outbox, and the service worker never caches API responses.
 - `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`; `env(safe-area-inset-*)` padding for the gesture bar.
 - Haptic tick on log via VueUse `useVibrate([10])`.
 - Install prompt: catch `beforeinstallprompt`, show a one-time "Add to home screen" card in Settings.
-- Web Push works for Android PWAs but needs a sender — **Firebase Cloud Messaging** plus a scheduled Cloud Function (Blaze plan, still free at this volume). Skip in v1.
+- Web Push works for Android PWAs but needs a push server that signs VAPID messages. Apps Script cannot do that, so notifications are out of v1; if the 9 pm habit needs a nudge, a time-driven Apps Script trigger can send an email or a Google Chat message instead.
 
 ### 6.11 Repo layout
 
@@ -709,6 +690,8 @@ homecrew/
 │   └── CODEOWNERS
 ├── CONTEXT.md                        # shared vocabulary (grill-with-docs)
 ├── docs/
+│   ├── Plan.md                       # this document
+│   ├── Architecture.md               # how the pieces fit: data flow, sheet layout, script API, sync
 │   ├── adr/                          # architecture decision records
 │   ├── design/DESIGN.md              # tokens, dials, design read, references
 │   └── specs/                        # published specs
@@ -719,10 +702,10 @@ homecrew/
 │   ├── main.ts                       # createApp, pinia, router, PWA register
 │   ├── App.vue                       # shell: tab bar, sync icon, update toast
 │   ├── router.ts                     # createWebHashHistory
-│   ├── firebase.ts                   # initializeApp, auth, firestore w/ persistentLocalCache
+│   ├── config.ts                     # SetupLink parsing; endpoint + secret + member id from localStorage
 │   ├── schemas/                      # Zod: household.ts task.ts reward.ts event.ts backup.ts migrate.ts
 │   ├── domain/                       # PURE: derive.ts combos.ts schedule.ts time.ts ids.ts seed.ts
-│   ├── data/                         # repo.ts (interface) firestoreRepo.ts memoryRepo.ts
+│   ├── data/                         # repo.ts (interface) sheetsRepo.ts outbox.ts snapshot.ts memoryRepo.ts
 │   ├── stores/                       # Pinia: household.ts catalog.ts events.ts sync.ts prefs.ts
 │   ├── composables/                  # useToast.ts useHaptic.ts useInstallPrompt.ts
 │   ├── components/                   # BigButton.vue TaskGroup.vue Bar.vue HeatStrip.vue Avatar.vue Toast.vue
@@ -731,15 +714,16 @@ homecrew/
 ├── tests/
 │   ├── domain/derive.test.ts combos.test.ts schedule.test.ts time.test.ts
 │   ├── schemas/event.test.ts migrate.test.ts
-│   ├── data/firestoreRepo.test.ts rules.test.ts   # emulator job
+│   ├── data/sheetsRepo.test.ts outbox.test.ts   # fake fetch; replay + dedupe
 │   ├── stores/events.test.ts
 │   ├── components/TaskGroup.test.ts Toast.test.ts RewardCard.test.ts
 │   ├── tokens/contrast.test.ts
 │   └── e2e/*.spec.ts                 # Playwright, one per page
-├── firestore.rules
+├── apps-script/                      # the backend: Code.js (doPost router, sheet I/O), appsscript.json, .clasp.json
+│   └── README.md                     # deploy: clasp push && clasp deploy -i <deploymentId>
 ├── vite.config.ts                    # base: '/homecrew/', VitePWA({ registerType: 'prompt', manifest })
 ├── tsconfig.json                     # strict, "moduleResolution": "bundler"
-└── Plan.md
+└── README.md
 ```
 
 ### 6.12 Testing & quality
@@ -748,7 +732,7 @@ The full test discipline (red first, regression tests for bugs, per-layer covera
 
 - **Domain** (most of the tests): table-driven Vitest cases — "two pots + pans + counters + trash + dishwasher on same day → bonus emitted once", "undo removes points", "week rollup respects Monday boundary across DST", "kid tasks don't touch adult balance".
 - **Schemas**: round-trip tests (`parse(serialize(x)) deep-equals x`), rejection tests (points 51, missing `v`), migration tests (`v0` fixture → `v1`).
-- **Repo**: `MemoryRepo` in tests; one smoke test against the Firestore emulator in CI (optional).
+- **Repo**: `MemoryRepo` in tests; `SheetsRepo` against a fake `fetch` (Vitest) for parse-before-send, skip-bad-rows, outbox replay and dedupe. The Apps Script has a `test_` function run from the script editor against a scratch sheet before each deploy (manual, documented in `apps-script/README.md`).
 - **Components**: a handful — `TaskGroup.vue` sub-item taps emit the right task ids; `Toast.vue` undo calls the store.
 - **CI** (`deploy.yml`): `npm ci` → `vue-tsc --noEmit` → `eslint` → `vitest run` → `vite build` → publish `dist/` to `gh-pages`. A red test blocks deploy.
 
@@ -774,7 +758,7 @@ jobs:
           publish_dir: ./dist
 ```
 
-`ci.yml` runs the same checks on every PR (required status checks, see §7.4); `preview.yml` publishes each PR's build under `/pr-<n>/` so it can be installed on a phone before merging. Repo → Settings → Pages → source `gh-pages` branch. App lives at `https://<user>.github.io/homecrew/`. Firestore rules are deployed separately with `firebase deploy --only firestore:rules` (or a second job using `FIREBASE_TOKEN`).
+`ci.yml` runs the same checks on every PR (required status checks, see §7.4); `preview.yml` publishes each PR's build under `/pr-<n>/` so it can be installed on a phone before merging. Repo → Settings → Pages → source `gh-pages` branch. App lives at `https://<user>.github.io/homecrew/`. The Apps Script is deployed separately and rarely: `clasp push && clasp deploy -i <deploymentId>` from `apps-script/`, updating the existing deployment so the URL in the setup link never changes.
 
 ---
 ## 7. Engineering process & quality
@@ -815,7 +799,7 @@ Then `/setup-matt-pocock-skills` once: issue tracker = **GitHub Issues**, triage
 ```
 CONTEXT.md          shared vocabulary: "event", "complete", "combo", "claim", "ack",
                     "household bar", "quick row", "group task", "sub-item", "star"
-docs/adr/           one file per decision (0001-firestore-over-supabase.md,
+docs/adr/           one file per decision (0001-google-sheet-as-mvp-database.md,
                     0002-append-only-events.md, 0003-vue-over-react.md, ...)
 docs/design/DESIGN.md   tokens, dials, design read, reference screenshots
 docs/specs/         specs published by /to-spec (mirrored from the issue)
@@ -879,7 +863,7 @@ Done when
 - Commits inside a branch are free-form; the squash commit message follows Conventional Commits (`feat(log): quick row logging (#123)`), which feeds `CHANGELOG.md` via changesets.
 - PR template sections: *What* (one paragraph), *Why* (link to ticket), *Tests* (list the tests added and paste the red run output or CI link for the first failing run), *Screenshots light/dark* (UI), *Taste Skill pre-flight* (UI), *Risk* (data model? migration? rules change?).
 - Review order: `/code-review` first (it catches the mechanical things), then the human reviewer reads for intent, naming against `CONTEXT.md`, and whether the tests would actually catch the bug the ticket describes.
-- A PR that changes `schemas/` or `firestore.rules` needs both partners' approval and an ADR if the change is not backward compatible.
+- A PR that changes `schemas/` or `apps-script/` needs both partners' approval and an ADR if the change is not backward compatible.
 - Deploy is the merge. Preview: each PR also deploys to `https://<user>.github.io/homecrew/pr-123/` via a second Pages job so it can be installed on a phone before merging.
 
 ### 7.5 Test discipline: red, then green, then it stays green
@@ -902,10 +886,10 @@ What each layer proves:
 |---|---|---|---|
 | `domain/` | Vitest, table-driven | balances, rollups, combos, streaks, week/month boundaries, due logic, star vs point separation | any change in points math, double-counted bonus, off-by-one on Monday |
 | `schemas/` | Vitest | accept/reject cases, round-trip serialize/parse, `v0 → v1` migration fixtures | a field renamed without a migration, points > 50 sneaking in |
-| `data/` | Vitest + Firestore emulator (CI job) | repo writes parse before send, reads skip bad docs without throwing, rules deny non-members and non-self actors | a rules edit that opens the household, a doc that breaks the listener |
+| `data/` | Vitest with a fake `fetch`; Apps Script `test_` function run against a scratch sheet before each deploy (manual) | repo writes parse before send, reads skip bad rows without throwing, outbox replays after reconnect and never duplicates, script rejects a wrong secret and a duplicate event id | a row that breaks the poll, an outbox replay that double-logs, a script change that opens the sheet |
 | `stores/` | Vitest with `MemoryRepo` | actions append correct events, getters reflect derived state, undo window | undo appending the wrong ref, quick row learning from the wrong window |
 | components | Vitest + `@vue/test-utils` | `TaskGroup` emits sub-item ids, ×2 badge, toast Undo wiring, `RewardCard` disabled reason | UI that emits the wrong task, claim button enabled with short balance |
-| end-to-end | Playwright on the built PWA (one spec per page in §5.5) | two-tap log, offline log then reconnect, join by code, claim/ack across two browser contexts, light/dark screenshots | broken service worker, hash route 404, theme regression |
+| end-to-end | Playwright on the built PWA (one spec per page in §5.5) | two-tap log, offline log then reconnect, connect by setup link, claim/ack across two browser contexts, light/dark screenshots | broken service worker, hash route 404, theme regression |
 | tokens | Vitest | WCAG contrast over `tokens.css` | a palette tweak that drops below 4.5:1 |
 
 Gates in CI (all required for merge): `vue-tsc --noEmit`, `eslint`, `vitest run --coverage` with **100% line coverage on `domain/` and `schemas/`** (these are pure and small; anything untested there is a future argument about points), 80% elsewhere, Playwright smoke on the built bundle, contrast test. Coverage numbers are a floor, not the goal; the red-first rule is the goal.
@@ -950,20 +934,20 @@ The app tracks; this is the operating plan it tracks against. Adjust freely.
 - Pick 5 rewards each that you'd actually want.
 - Set weekly target.
 - Output: `seed.ts` data.
-- Install both skill sets, run `/setup-matt-pocock-skills`, run `/grill-with-docs` on this Plan, publish the first spec + tickets. Write `CONTEXT.md` and the first three ADRs (Firestore, append-only events, Vue).
+- Install both skill sets, run `/setup-matt-pocock-skills`, run `/grill-with-docs` on this Plan, publish the first spec + tickets. Write `CONTEXT.md` and the first three ADRs (Google Sheet as MVP database, already written as ADR-0001; append-only events; Vue).
 - Set up the repo: branch protection, CI, PR/issue templates, `tokens.css` with both themes, `DESIGN.md` with the design read.
 
 ### Phase 1 — MVP (1–2 weekends)
 - Vite + Vue 3 + TypeScript + Pinia + vite-plugin-pwa, hash router, dark theme.
-- Zod schemas for Household/Task/Reward/Event; `MemoryRepo` + `FirestoreRepo` behind the `HouseholdRepo` interface.
-- Firebase project, anonymous auth, household create/join with code.
+- Zod schemas for Household/Task/Reward/Event; `MemoryRepo` + `SheetsRepo` behind the `HouseholdRepo` interface; outbox + snapshot in IndexedDB.
+- Google Sheet with the tab layout from `docs/Architecture.md`, Apps Script deployed, setup-link flow, member pick. Seed the tasks and rewards tabs from `seed.ts` through the script's `seed` action.
 - Log screen with categories, big buttons, toast + undo. Quick row.
 - Today screen.
 - Week overview: household bar, split, by-category.
 - Domain layer (`derive.ts`, `combos.ts`) with Vitest tests.
 - Deploy to GitHub Pages; install on both phones.
 - Every item above is a ticket with red-first tests; nothing lands without a PR and review.
-- **Success = both phones logging and seeing each other within 2 s, in light and dark.**
+- **Success = both phones logging and seeing each other within 30 s, and instantly on opening the app,, in light and dark.**
 
 ### Phase 2 — Rewards & fairness (1 weekend)
 - Rewards catalog, claim/acknowledge flow, wallet.
@@ -976,9 +960,9 @@ The app tracks; this is the operating plan it tracks against. Adjust freely.
 ### Phase 3 — Polish (as you feel like it)
 - Streak bonus.
 - Android app shortcuts (Kitchen Reset from the icon).
-- Update toast, App Check.
-- Notifications via FCM + scheduled function (only if the 9 pm habit isn't sticking).
-- Optional Google account linking.
+- Update toast.
+- A 9 pm nudge via a time-driven Apps Script trigger (email or Google Chat), only if the habit isn't sticking.
+- Move to Firestore or Supabase behind the same `HouseholdRepo` if live updates start to matter (ADR-0001 upgrade path).
 - Auto-suggest "due" tasks based on `freq` and last completion (gentle, not nagging: a small dot on the category).
 
 ### Explicit non-goals
@@ -993,13 +977,14 @@ The app tracks; this is the operating plan it tracks against. Adjust freely.
 | Decision | Options | Lean |
 |---|---|---|
 | Framework | Vue 3 vs Svelte vs vanilla | Vue 3 + TypeScript (decided) |
-| Local store | Firestore cache only vs + Dexie outbox | Firestore cache only for v1 |
+| Data layer | Google Sheet + Apps Script vs Firestore vs Supabase | Google Sheet for the MVP (decided, ADR-0001) |
+| Local store | idb-keyval outbox + snapshot vs Dexie | idb-keyval (decided; one queue, one snapshot) |
 | Validation | Zod vs Valibot vs none | Zod (decided) |
 | Styling | CSS tokens vs Tailwind v4 | CSS tokens (decided; ~10 components, tokens are the theme) |
 | Icons | Phosphor vs Tabler vs Material Symbols | Phosphor (decided) |
 | Issue tracker | GitHub Issues vs Linear vs local files | GitHub Issues (decided; same place as the code) |
-| Push notifications | FCM (needs Blaze plan) vs none | None in v1 |
-| Auth | Anonymous vs Google | Anonymous, link later |
+| Push notifications | Web Push (needs a push server) vs Apps Script email nudge vs none | None in v1 |
+| Identity | Shared secret + self-declared member vs Google sign-in | Shared secret for the MVP (decided, ADR-0001) |
 | Cooking vs reset split | Cook 6 / Reset 14 as proposed, or equal | Decide in Phase 0 — this one matters for you specifically |
 | Night feeds | Count per wake (3) vs flat "night duty" (8) | Flat per night is easier to log at 3 am |
 | Kid points | Separate stars vs contribute to household | Separate; keeps the adult economy clean |
@@ -1009,7 +994,7 @@ The app tracks; this is the operating plan it tracks against. Adjust freely.
 ## 11. Ideas parking lot
 
 - **"Invisible load" tasks**: booking appointments, remembering birthdays, restocking diapers. Add a category "🧠 Admin" with a generic 2-pt "handled a thing" button + optional note.
-- **Photo proof for the satisfying ones**: clear counter photo attached to the reset. Not for checking — for the before/after dopamine. (Firebase Storage free tier.)
+- **Photo proof for the satisfying ones**: clear counter photo attached to the reset. Not for checking — for the before/after dopamine. (A Drive folder next to the sheet, written by the script.)
 - **Weekly auto-summary card**: shareable image "This week: 231 pts, 38 kitchen resets this month, counters clean 26/30 days."
 - **Guest mode**: grandparents visiting can log without joining.
 - **Reward calendar integration**: acknowledged claim creates a Google Calendar event on both calendars ("A: solo coffee, B: kids").
@@ -1057,7 +1042,7 @@ Replaces the "photo + timer + deduct" idea with the same mechanics minus the pun
 - **Leave-no-trace bonus**: if the Loose ends list is empty at midnight, both adults get +5. Framed as gain, it targets exactly the behaviour the deduction was meant to target.
 - Loose ends never appear in the Overview split. They are not a scoreboard.
 
-Data model: one new event type `looseend` with `photoRef?`, `text`, `category`, plus `clear` events referencing it; the bonus is emitted by `combos.ts` with a deterministic id like the other combos. Photos go to Firebase Storage under `households/{hid}/looseends/{id}.jpg`, resized client-side to 800 px, auto-deleted after 30 days.
+Data model: one new event type `looseend` with `photoRef?`, `text`, `category`, plus `clear` events referencing it; the bonus is emitted by `combos.ts` with a deterministic id like the other combos. Photos go to a Drive folder next to the sheet (`looseends/{id}.jpg`, written by the script), resized client-side to 800 px, auto-deleted after 30 days.
 
 ### 12.4 Owned slots by chronotype
 

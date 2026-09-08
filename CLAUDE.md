@@ -1,10 +1,12 @@
 # HomeCrew (instachores-app)
 
-Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite, Firestore sync, event-sourced points, hosted on GitHub Pages. The full plan is `docs/Plan.md`; read its §5 (pages), §6 (architecture) and §7 (process) before building anything.
+Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite, event-sourced points, a shared Google Sheet behind an Apps Script web app as the MVP data layer, hosted on GitHub Pages. The full plan is `docs/Plan.md`; read its §5 (pages), §6 (architecture) and §7 (process) and `docs/Architecture.md` before building anything.
 
 ## Where things are
 
-- `docs/Plan.md`: product plan, task catalog, architecture, process, roadmap.
+- `docs/Plan.md`: product plan, task catalog, architecture summary, process, roadmap.
+- `docs/Architecture.md`: layers, data flow, sheet layout, Apps Script API, sync and offline, identity, deploy, testing map.
+- `docs/adr/`: architecture decision records. ADR-0001 is the Google Sheet data layer.
 - `docs/design/DESIGN.md`: design read, dials, color tokens, components, dark-mode protocol, UI pre-flight.
 - `docs/agents/`: per-repo configuration read by the engineering skills.
 - `.claude/skills/`: vendored skills (see below).
@@ -13,7 +15,8 @@ Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite,
 
 - Every change is an issue, becomes a branch, is built test-first, goes through a PR, merges only when CI is green.
 - Red first: a test is seen failing before the code exists. Domain and schema layers require it; everywhere else it is the default.
-- Points math lives only in `src/domain/` (pure TypeScript, no Vue, no Firebase). Every boundary parses through Zod.
+- Points math lives only in `src/domain/` (pure TypeScript, no Vue, no fetch). Every boundary parses through Zod.
+- The data layer is `SheetsRepo` behind the `HouseholdRepo` interface. Writes go to the outbox first; the UI never waits on the network. The household secret never enters the repo.
 - UI tickets start with the Design Read from `DESIGN.md` §1 and end with its pre-flight. Screenshots in light and dark on every UI PR.
 - No em-dashes in UI strings. No hard-coded colors in components. Phosphor icons only.
 
