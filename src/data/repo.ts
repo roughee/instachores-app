@@ -6,9 +6,16 @@ export interface SyncResult {
   /** Outbox entries still waiting to be confirmed by the backend. */
   pending: number
   syncedAt: Date
+  /** Outbox entries that failed this sync but stay queued (`locked`/`network`). */
+  retryable?: number
+  /** Outbox entries dropped this sync after a final error (`conflict`/`invalid`). */
+  dropped?: number
+  /** Events pulled from `events.since` this sync. */
+  pulled?: number
+  lastError?: string
 }
 
-export type RepoErrorCode = 'unauthorized' | 'conflict' | 'invalid' | 'locked'
+export type RepoErrorCode = 'unauthorized' | 'conflict' | 'invalid' | 'locked' | 'network'
 
 /** Mirrors the Apps Script error codes (Architecture §5). */
 export class RepoError extends Error {
