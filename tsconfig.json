@@ -18,5 +18,13 @@
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts", "scripts/**/*.ts", "vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "vite.config.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts"
+  ]
 }

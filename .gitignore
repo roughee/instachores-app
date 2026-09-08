@@ -4,6 +4,8 @@ coverage
 .vite
 *.local
 .DS_Store
+e2e-results
+playwright-report
 
 # Real clasp config carries a live script id; only .clasp.json.example is committed.
 apps-script/.clasp.json

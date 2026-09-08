@@ -87,3 +87,31 @@ Stryker can automate this on `src/domain/` later (Plan §7.5).
 npx vitest run tests/domain/time.test.ts
 npx vitest run -t "spring DST"
 ```
+
+## The e2e layer (Playwright, issue #22)
+
+Everything above runs against source, in Node, with a fake `fetch` or `MemoryRepo`. `e2e/` is different on purpose: it runs Playwright/Chromium against the **production build** (`vite build` then `vite preview`), with the Apps Script endpoint mocked in the browser via `page.route()` — proof that the built bundle, the service worker and hash routing actually work, not just that the source does.
+
+```bash
+npm run e2e          # vite build && playwright test
+npx playwright test e2e/offline-log.spec.ts   # one file
+npx playwright show-report                     # the last CI run's HTML report, if one was generated
+```
+
+Locally this uses the sandbox's preinstalled Chromium (`playwright.config.ts` points `executablePath` at it) — never run `playwright install` here, same rule as `scripts/screenshots.mjs`. In CI, the `e2e` job (`.github/workflows/ci.yml`, `needs: check`) has no browser preinstalled, so it runs `npx playwright install --with-deps chromium` first; the config switches on `process.env.CI`.
+
+What it covers, one spec per file under `e2e/`:
+
+| Spec | Proves |
+|---|---|
+| `connect-and-log.spec.ts` | Connect by setup link (`#/welcome?s=…`), pick a member, land on Log; a quick-row tap updates the household bar and sends exactly one `events.append` |
+| `offline-log.spec.ts` | A tap while offline (`context.setOffline(true)`) still updates the bar; back online, the queued event is sent once and the outbox count returns to zero |
+| `two-contexts-sync.spec.ts` | An event appended in one browser context appears in another context's Today list within one poll interval |
+| `screenshots-and-colors.spec.ts` | Light/dark screenshots of Log and Overview, saved as test artifacts, plus a colour audit: every computed `color`/`background-color` on those screens must resolve to a token from `tokens.css` (or the documented member-color exception) |
+| `routing-and-service-worker.spec.ts` | A hard refresh on a hash route (`#/overview`) returns the app, not a 404; the service worker serves the shell when the page reloads offline |
+
+`e2e/support/mockSheet.ts` is the mocked script: a small in-memory "sheet" (`MockSheet`) that answers `bootstrap`, `events.since`, `events.append` and `version` the same way `apps-script/Code.js` does, plus a log of every `events.append` call for assertions. Route it into a `BrowserContext` with `routeMockSheet(context, sheet)`; the same `MockSheet` instance routed into two contexts is how the two-contexts spec makes them see each other, the same as two phones sharing one real sheet.
+
+The two-contexts spec needs a poll faster than the real 30s cadence: `?pollMs=` is a dev-only query flag (`src/composables/usePwa.ts`'s `readPollIntervalMs`, wired in `src/main.ts`), harmless in production since nobody links to the app with it, unit-tested like the other force flags (`hasFlag`).
+
+Screenshots and Playwright's own traces/reports land in `e2e-results/` and `playwright-report/` (gitignored); CI uploads them as artifacts on every run, pass or fail.
