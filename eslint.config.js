@@ -125,6 +125,7 @@ export default tseslint.config(
         navigator: 'readonly',
         document: 'readonly',
         fetch: 'readonly',
+        location: 'readonly',
       },
     },
   },

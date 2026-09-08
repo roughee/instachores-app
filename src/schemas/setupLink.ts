@@ -36,3 +36,22 @@ export function encodeSetupLink(link: SetupLink): string {
 export function decodeSetupLink(encoded: string): SetupLink {
   return SetupLink.parse(JSON.parse(fromBase64Url(encoded)))
 }
+
+/**
+ * Pulls the `s=` token out of a pasted full setup-link URL (issue #16,
+ * Architecture.md §7: `https://<user>.github.io/homecrew/#/welcome?s=<token>`).
+ * A bare token -- what the Welcome screen's field is pre-filled with when the
+ * link itself was opened -- passes through unchanged, trimmed. Never throws;
+ * a URL with no `s` param falls back to the trimmed input, which then fails
+ * `decodeSetupLink` the same way any other malformed link would.
+ */
+export function extractSetupLinkToken(raw: string): string {
+  const trimmed = raw.trim()
+  const afterHash = trimmed.includes('#') ? trimmed.slice(trimmed.indexOf('#') + 1) : trimmed
+  const queryIndex = afterHash.indexOf('?')
+  if (queryIndex >= 0) {
+    const token = new URLSearchParams(afterHash.slice(queryIndex + 1)).get('s')
+    if (token) return token
+  }
+  return trimmed
+}
