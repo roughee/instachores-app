@@ -1,1 +1,0 @@
-import{_ as e,b as t,i as n,m as r,u as i}from"./index-BaCEVGck.js";import{t as a}from"./EmptyState-C3bicq_5.js";var o=r({__name:`RewardsScreen`,setup(r){return(r,o)=>(e(),i(a,{icon:t(n),label:`Turn points into rest once rewards are set up.`},null,8,[`icon`]))}});export{o as default};
