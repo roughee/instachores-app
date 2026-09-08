@@ -578,3 +578,95 @@ describe('SheetsRepo: upsertTask/upsertReward', () => {
     expect((await outbox.pending()).map((e) => e.payload.id)).toEqual([t2.id])
   })
 })
+
+describe('SheetsRepo: review fixes', () => {
+  it('stop() during an in-flight tick prevents the tick from rescheduling itself', async () => {
+    vi.useFakeTimers()
+    try {
+      let release: (() => void) | undefined
+      const fetchImpl = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = () => resolve(jsonResponse({ ok: true, events: [], serverTime: 'x' }))
+          }),
+      )
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+      })
+      await repo.init()
+      repo.start()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+
+      repo.stop()
+      release?.()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an unauthorized answer keeps the outbox entry queued instead of dropping it', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: false, code: 'unauthorized' }))
+    const outbox = new Outbox(memoryStore())
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox,
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+    await repo.init()
+    await repo.appendEvent(HID, complete(task()))
+    await settle()
+    const result = await repo.sync()
+    expect(result.retryable).toBe(1)
+    expect(result.dropped).toBe(0)
+    expect((await outbox.pending()).length).toBe(1)
+  })
+
+  it('connect() adopts the link it validated, so later syncs use it', async () => {
+    const other: SetupLink = { url: 'https://script.google.com/macros/s/other/exec', secret: 'y'.repeat(12) }
+    const urls: string[] = []
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      urls.push(String(url))
+      const body = parsedBody(init)
+      if (body.action === 'bootstrap') {
+        return jsonResponse({
+          ok: true,
+          household: {
+            v: 1,
+            id: HID,
+            name: 'Home',
+            weeklyTarget: 250,
+            tz: 'Europe/Vilnius',
+            createdAt: '2026-09-01T00:00:00.000Z',
+          },
+          members: [{ uid: ANA, name: 'Ana', color: '#128369', role: 'adult' }],
+          tasks: [],
+          rewards: [],
+          events: [],
+          serverTime: 'x',
+        })
+      }
+      return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+    })
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+    await repo.connect(other)
+    await repo.sync()
+    expect(urls.every((u) => u === other.url)).toBe(true)
+  })
+})

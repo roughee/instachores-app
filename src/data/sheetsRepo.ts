@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { mergeEvents, nextCursor } from './merge'
 import type { Outbox } from './outbox'
 import { RepoError } from './repo'
-import type { HouseholdRepo, RepoLog, SyncResult, Unsubscribe } from './repo'
+import type { HouseholdRepo, RepoLog, RepoStatus, SyncResult, Unsubscribe } from './repo'
 import { postAction } from './sheetsClient'
 import type { Snapshot, SnapshotData } from './snapshot'
 
@@ -46,16 +46,8 @@ export interface SheetsRepoOptions {
   timers?: RepoTimers
 }
 
-/** What the sync store (#15) reads for the status dot and the Sync panel. */
-export interface SheetsRepoStatus {
-  online: boolean
-  outboxCount: number
-  lastPollAt: Date | undefined
-  lastError: string | undefined
-  /** Rows dropped across every poll and snapshot load because they failed to parse. */
-  skippedRows: number
-  intervalMs: number
-}
+/** The status shape is the interface's; kept under this name for callers that import it from here. */
+export type SheetsRepoStatus = RepoStatus
 
 const POLL_INTERVAL_MS = 30_000
 const BACKOFF_INTERVAL_MS = 120_000
@@ -138,8 +130,10 @@ function buildMembersRecord(rows: unknown[]): Record<string, unknown> {
   return record
 }
 
+/** Retryable: the entry stays queued. `unauthorized` is retryable too: a rotated
+ * secret must not silently drop pending writes; the user re-enters the link. */
 function isRetryable(err: unknown): boolean {
-  return err instanceof RepoError && (err.code === 'locked' || err.code === 'network')
+  return err instanceof RepoError && (err.code === 'locked' || err.code === 'network' || err.code === 'unauthorized')
 }
 
 function errorMessage(err: unknown): string {
@@ -147,7 +141,7 @@ function errorMessage(err: unknown): string {
 }
 
 export class SheetsRepo implements HouseholdRepo {
-  private readonly link: SetupLinkT
+  private link: SetupLinkT
   private readonly householdId: string
   private readonly outbox: Outbox
   private readonly snapshotStore: Snapshot
@@ -175,6 +169,7 @@ export class SheetsRepo implements HouseholdRepo {
   }
 
   private timer: ReturnType<typeof setTimeout> | undefined
+  private running = false
   private consecutiveFailures = 0
 
   constructor(options: SheetsRepoOptions) {
@@ -328,6 +323,8 @@ export class SheetsRepo implements HouseholdRepo {
 
   /** Validates the link against `bootstrap`. On success this becomes the repo's state; on `unauthorized` nothing is written. */
   async connect(link: SetupLinkT): Promise<HouseholdT> {
+    // A snapshot load still in flight must not overwrite the connected state.
+    if (this.initPromise) await this.initPromise.catch(() => undefined)
     const since = new Date(this.now().getTime() - CONNECT_LOOKBACK_MS)
     const res = await postAction<BootstrapResponse>(this.fetchImpl, link.url, link.secret, 'bootstrap', {
       since: since.toISOString(),
@@ -339,6 +336,7 @@ export class SheetsRepo implements HouseholdRepo {
     const events = parseRows(ChoreEvent, res.events, 'event', this.log)
 
     const cursor = nextCursor(undefined, events.items)
+    this.link = link
     this.state = {
       household,
       tasks: tasks.items,
@@ -475,6 +473,7 @@ export class SheetsRepo implements HouseholdRepo {
   // -- Poller: 30s while visible, backoff to 2min after 3 consecutive failures. --------------
 
   private scheduleNext(): void {
+    if (!this.running) return
     this.timer = this.timers.setTimeout(() => {
       void this.tick()
     }, this.status.intervalMs)
@@ -500,13 +499,15 @@ export class SheetsRepo implements HouseholdRepo {
 
   /** Starts the recurring poll. Visibility/online listeners attach only where `document`/`window` exist. */
   start(): void {
-    if (this.timer !== undefined) return
+    if (this.running) return
+    this.running = true
     this.scheduleNext()
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.handleVisibilityChange)
     if (typeof window !== 'undefined') window.addEventListener('online', this.handleOnline)
   }
 
   stop(): void {
+    this.running = false
     if (this.timer !== undefined) {
       this.timers.clearTimeout(this.timer)
       this.timer = undefined

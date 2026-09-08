@@ -17,6 +17,17 @@ export interface SyncResult {
 
 export type RepoErrorCode = 'unauthorized' | 'conflict' | 'invalid' | 'locked' | 'network'
 
+/** What the sync store reads for the status dot and the Sync panel. */
+export interface RepoStatus {
+  online: boolean
+  outboxCount: number
+  lastPollAt: Date | undefined
+  lastError: string | undefined
+  /** Rows dropped because they failed to parse, across polls and snapshot loads. */
+  skippedRows: number
+  intervalMs: number
+}
+
 /** Mirrors the Apps Script error codes (Architecture §5). */
 export class RepoError extends Error {
   readonly code: RepoErrorCode
@@ -50,6 +61,8 @@ export interface HouseholdRepo {
   upsertReward(id: string, r: Reward): Promise<void>
   connect(link: SetupLink): Promise<Household>
   sync(): Promise<SyncResult>
+  /** Fires synchronously with the current status and again whenever it changes. */
+  watchStatus(cb: (s: RepoStatus) => void): Unsubscribe
 }
 
 export type RepoLog = (message: string, detail?: unknown) => void
