@@ -194,6 +194,23 @@ describe('sessionStore.ready', () => {
   })
 })
 
+describe('sessionStore.ready and startDemo (#18)', () => {
+  it('startDemo also resolves ready, so a fresh boot straight into demo mode does not hang the router guard forever', async () => {
+    const demoRepo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    configureSession({
+      storage: fakeStorage(),
+      createSheetsRepo: unusedDemo,
+      createDemoRepo: () => demoRepo,
+      now: () => NOW,
+    })
+    const session = useSessionStore()
+
+    await session.startDemo(NOW)
+
+    await expect(session.ready).resolves.toBeUndefined()
+  })
+})
+
 describe('sessionStore.disconnect', () => {
   it('stops the poller, unbinds every store and clears the stored session', async () => {
     const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
