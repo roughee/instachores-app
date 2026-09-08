@@ -5,9 +5,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+# One group shared with deploy.yml: every publish to gh-pages is a git push
+# to the same branch, and two at once race on the ref (seen on #33 and #34).
 concurrency:
-  group: pages-preview-${{ github.event.number }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 jobs:
   deploy-preview:
     if: github.event.action != 'closed'

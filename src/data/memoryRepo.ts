@@ -18,7 +18,7 @@ import type {
 import type { z } from 'zod'
 import { demoRepoSeed } from './demo'
 import { RepoError } from './repo'
-import type { HouseholdRepo, MemoryRepoSeed, RepoLog, SyncResult, Unsubscribe } from './repo'
+import type { HouseholdRepo, MemoryRepoSeed, RepoLog, RepoStatus, SyncResult, Unsubscribe } from './repo'
 
 interface HouseholdStore {
   household: unknown
@@ -194,6 +194,12 @@ export class MemoryRepo implements HouseholdRepo {
     const h = this.parseHousehold(id)
     if (!h) throw new RepoError('invalid', 'the seeded household failed to parse')
     return h
+  }
+
+  /** Nothing to sync in memory: always online, never anything pending. */
+  watchStatus(cb: (s: RepoStatus) => void): Unsubscribe {
+    cb({ online: true, outboxCount: 0, lastPollAt: undefined, lastError: undefined, skippedRows: 0, intervalMs: 0 })
+    return () => undefined
   }
 
   async sync(): Promise<SyncResult> {

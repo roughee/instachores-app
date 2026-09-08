@@ -6,7 +6,8 @@ Household chores PWA for two adults and a 5-year-old: Vue 3 + TypeScript + Vite,
 
 - `docs/Plan.md`: product plan, task catalog, architecture summary, process, roadmap.
 - `docs/Architecture.md`: layers, data flow, sheet layout, Apps Script API, sync and offline, identity, deploy, testing map.
-- `docs/adr/`: architecture decision records. ADR-0001 is the Google Sheet data layer.
+- `CONTEXT.md`: the shared glossary of household, event and sync terms, in the project's own words.
+- `docs/adr/`: architecture decision records. ADR-0001 is the Google Sheet data layer, ADR-0002 append-only events, ADR-0003 Vue over React and Svelte.
 - `docs/Testing.md`: the testing loop, coverage gates, fixture rules, mutation checks.
 - `docs/Setup.md`: the ten-minute procedure to create a real household sheet, deploy the Apps Script and seed the catalog (`scripts/household.ts`, `npm run household`).
 - `docs/design/DESIGN.md`: design read, dials, color tokens, components, dark-mode protocol, UI pre-flight.
