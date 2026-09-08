@@ -41,7 +41,10 @@ export class FakeSheet {
   private grid: unknown[][] = []
   readonly formats: { row: number; col: number; numRows: number; numCols: number; format: string }[] = []
 
-  constructor(private readonly name: string, seedRows: unknown[][] = []) {
+  constructor(
+    private readonly name: string,
+    seedRows: unknown[][] = [],
+  ) {
     seedRows.forEach((row) => this.grid.push(row.slice()))
   }
 
@@ -139,7 +142,12 @@ export function createFakeLockService(opts: { tryLockSucceeds?: boolean } = {}):
 }
 
 export function createFakePropertiesService(props: Record<string, string> = {}): {
-  PropertiesService: { getScriptProperties: () => { getProperty: (k: string) => string | null; setProperty: (k: string, v: string) => void } }
+  PropertiesService: {
+    getScriptProperties: () => {
+      getProperty: (k: string) => string | null
+      setProperty: (k: string, v: string) => void
+    }
+  }
 } {
   const store = { ...props }
   return {
@@ -159,7 +167,9 @@ export interface FakeTextOutput {
   getContent(): string
 }
 
-export function createFakeContentService(): { ContentService: { MimeType: { JSON: string }; createTextOutput: (text: string) => FakeTextOutput } } {
+export function createFakeContentService(): {
+  ContentService: { MimeType: { JSON: string }; createTextOutput: (text: string) => FakeTextOutput }
+} {
   return {
     ContentService: {
       MimeType: { JSON: 'JSON' },
@@ -178,7 +188,9 @@ export function createFakeContentService(): { ContentService: { MimeType: { JSON
   }
 }
 
-export function createFakeDriveApp(): { DriveApp: { getFileById: (id: string) => { setTrashed: (v: boolean) => void } } } {
+export function createFakeDriveApp(): {
+  DriveApp: { getFileById: (id: string) => { setTrashed: (v: boolean) => void } }
+} {
   return {
     DriveApp: {
       getFileById: (_id: string) => ({ setTrashed: (_v: boolean) => undefined }),
@@ -186,7 +198,9 @@ export function createFakeDriveApp(): { DriveApp: { getFileById: (id: string) =>
   }
 }
 
-export function createFakeSpreadsheetApp(active: FakeSpreadsheet): { SpreadsheetApp: { getActiveSpreadsheet: () => FakeSpreadsheet; create: (name: string) => FakeSpreadsheet } } {
+export function createFakeSpreadsheetApp(active: FakeSpreadsheet): {
+  SpreadsheetApp: { getActiveSpreadsheet: () => FakeSpreadsheet; create: (name: string) => FakeSpreadsheet }
+} {
   return {
     SpreadsheetApp: {
       getActiveSpreadsheet: () => active,

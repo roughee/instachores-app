@@ -39,7 +39,6 @@ export function loadHomeCrew(gas: {
   ContentService: unknown
   DriveApp: unknown
 }): HomeCrewNamespace {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const run = new Function('SpreadsheetApp', 'LockService', 'PropertiesService', 'ContentService', 'DriveApp', SOURCE)
   run(gas.SpreadsheetApp, gas.LockService, gas.PropertiesService, gas.ContentService, gas.DriveApp)
   const globalAny = globalThis as unknown as { HomeCrew?: HomeCrewNamespace }

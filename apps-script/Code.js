@@ -51,9 +51,39 @@ var VERSION = '1.0.0'
 var HEADERS = {
   household: ['key', 'value'],
   members: ['uid', 'name', 'color', 'role'],
-  tasks: ['v', 'id', 'name', 'category', 'points', 'freq', 'forRole', 'parentId', 'comboBonus', 'archived', 'sort', 'updatedAt', 'updatedBy'],
+  tasks: [
+    'v',
+    'id',
+    'name',
+    'category',
+    'points',
+    'freq',
+    'forRole',
+    'parentId',
+    'comboBonus',
+    'archived',
+    'sort',
+    'updatedAt',
+    'updatedBy',
+  ],
   rewards: ['v', 'id', 'name', 'cost', 'kind', 'commitment', 'archived', 'updatedAt', 'updatedBy'],
-  events: ['v', 'id', 'type', 'actorUid', 'at', 'loggedAt', 'note', 'taskId', 'forUid', 'points', 'refEventId', 'rewardId', 'cost', 'combo', 'day'],
+  events: [
+    'v',
+    'id',
+    'type',
+    'actorUid',
+    'at',
+    'loggedAt',
+    'note',
+    'taskId',
+    'forUid',
+    'points',
+    'refEventId',
+    'rewardId',
+    'cost',
+    'combo',
+    'day',
+  ],
 }
 
 /** Household fields the `household.update` action is allowed to touch. */
@@ -164,7 +194,15 @@ function readHousehold(ctx) {
 function writeHouseholdFields(ctx, updates) {
   var sh = ctx.sheet('household')
   var lastRow = sh.getLastRow()
-  var keys = lastRow >= 2 ? sh.getRange(2, 1, lastRow - 1, 1).getValues().map(function (r) { return r[0] }) : []
+  var keys =
+    lastRow >= 2
+      ? sh
+          .getRange(2, 1, lastRow - 1, 1)
+          .getValues()
+          .map(function (r) {
+            return r[0]
+          })
+      : []
   Object.keys(updates).forEach(function (key) {
     var raw = updates[key]
     var value = raw instanceof Date ? raw.toISOString() : typeof raw === 'boolean' ? (raw ? 'TRUE' : 'FALSE') : raw
@@ -199,7 +237,14 @@ function bootstrap(ctx, params) {
   var tasks = readTable(ctx.sheet('tasks')).objects
   var rewards = readTable(ctx.sheet('rewards')).objects
   var since = eventsSince(ctx, { since: params.since })
-  return { household: household, members: members, tasks: tasks, rewards: rewards, events: since.events, serverTime: since.serverTime }
+  return {
+    household: household,
+    members: members,
+    tasks: tasks,
+    rewards: rewards,
+    events: since.events,
+    serverTime: since.serverTime,
+  }
 }
 
 /**
@@ -461,39 +506,125 @@ function test_() {
 
     // 1. Wrong secret is rejected and touches nothing.
     var eventsBefore = readTable(ss.getSheetByName('events')).objects.length
-    var wrong = JSON.parse(handleRequest(ctx, { secret: 'nope', action: 'events.append', events: [{ id: 'x', actorUid: 'ana', type: 'complete', points: 1 }] }).getContent())
-    check('wrong secret is rejected and touches nothing', wrong.ok === false && wrong.code === 'unauthorized' && readTable(ss.getSheetByName('events')).objects.length === eventsBefore)
+    var wrong = JSON.parse(
+      handleRequest(ctx, {
+        secret: 'nope',
+        action: 'events.append',
+        events: [{ id: 'x', actorUid: 'ana', type: 'complete', points: 1 }],
+      }).getContent(),
+    )
+    check(
+      'wrong secret is rejected and touches nothing',
+      wrong.ok === false &&
+        wrong.code === 'unauthorized' &&
+        readTable(ss.getSheetByName('events')).objects.length === eventsBefore,
+    )
 
     // 2. events.append: two duplicates, one new -> exactly one row appended.
-    var e1 = { v: 1, id: 'e1', type: 'complete', actorUid: 'ana', at: new Date().toISOString(), taskId: 'pots', forUid: 'ana', points: 2 }
+    var e1 = {
+      v: 1,
+      id: 'e1',
+      type: 'complete',
+      actorUid: 'ana',
+      at: new Date().toISOString(),
+      taskId: 'pots',
+      forUid: 'ana',
+      points: 2,
+    }
     handleRequest(ctx, { secret: 'scratch-secret', action: 'events.append', events: [e1] })
     var afterFirst = readTable(ss.getSheetByName('events')).objects.length
     var appendRes = JSON.parse(
       handleRequest(ctx, {
         secret: 'scratch-secret',
         action: 'events.append',
-        events: [e1, e1, { v: 1, id: 'e2', type: 'complete', actorUid: 'ben', at: new Date().toISOString(), taskId: 'counters', forUid: 'ben', points: 3 }],
+        events: [
+          e1,
+          e1,
+          {
+            v: 1,
+            id: 'e2',
+            type: 'complete',
+            actorUid: 'ben',
+            at: new Date().toISOString(),
+            taskId: 'counters',
+            forUid: 'ben',
+            points: 3,
+          },
+        ],
       }).getContent(),
     )
     var afterSecond = readTable(ss.getSheetByName('events')).objects.length
-    check('events.append appends exactly one new row and reports appended+skipped', appendRes.appended.length === 1 && appendRes.skipped.length === 2 && afterSecond === afterFirst + 1 && !!appendRes.loggedAt)
+    check(
+      'events.append appends exactly one new row and reports appended+skipped',
+      appendRes.appended.length === 1 &&
+        appendRes.skipped.length === 2 &&
+        afterSecond === afterFirst + 1 &&
+        !!appendRes.loggedAt,
+    )
 
     // 3. events.since returns only rows after the cursor, plus serverTime.
-    var sinceRes = JSON.parse(handleRequest(ctx, { secret: 'scratch-secret', action: 'events.since', since: appendRes.loggedAt }).getContent())
-    check('events.since filters by loggedAt and includes serverTime', Array.isArray(sinceRes.events) && !!sinceRes.serverTime)
+    var sinceRes = JSON.parse(
+      handleRequest(ctx, { secret: 'scratch-secret', action: 'events.since', since: appendRes.loggedAt }).getContent(),
+    )
+    check(
+      'events.since filters by loggedAt and includes serverTime',
+      Array.isArray(sinceRes.events) && !!sinceRes.serverTime,
+    )
 
     // 4. tasks.upsert: stale updatedAt is a conflict and leaves the row unchanged.
-    var task = { v: 1, id: 'task-1', name: 'Pots', category: 'kitchen', points: 2, freq: 'daily', forRole: 'adult', archived: false, sort: 0, updatedAt: new Date().toISOString(), updatedBy: 'ana' }
+    var task = {
+      v: 1,
+      id: 'task-1',
+      name: 'Pots',
+      category: 'kitchen',
+      points: 2,
+      freq: 'daily',
+      forRole: 'adult',
+      archived: false,
+      sort: 0,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'ana',
+    }
     handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: task })
     var stale = Object.assign({}, task, { name: 'Renamed', updatedAt: '2000-01-01T00:00:00.000Z' })
-    var conflictRes = JSON.parse(handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: stale }).getContent())
-    var storedTask = readTable(ss.getSheetByName('tasks')).objects.filter(function (t) { return t.id === 'task-1' })[0]
-    check('tasks.upsert conflicts on a stale updatedAt and leaves the row unchanged', conflictRes.ok === false && conflictRes.code === 'conflict' && storedTask.name === 'Pots')
+    var conflictRes = JSON.parse(
+      handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: stale }).getContent(),
+    )
+    var storedTask = readTable(ss.getSheetByName('tasks')).objects.filter(function (t) {
+      return t.id === 'task-1'
+    })[0]
+    check(
+      'tasks.upsert conflicts on a stale updatedAt and leaves the row unchanged',
+      conflictRes.ok === false && conflictRes.code === 'conflict' && storedTask.name === 'Pots',
+    )
 
     // 5. seed fills empty tabs, then refuses a second time.
-    var seedRes = JSON.parse(handleRequest(ctx, { secret: 'scratch-secret', action: 'seed', tasks: [], rewards: [{ v: 1, id: 'r1', name: 'Bath', cost: 15, kind: 'solo', archived: false, updatedAt: new Date().toISOString(), updatedBy: 'ana' }] }).getContent())
-    var reseedRes = JSON.parse(handleRequest(ctx, { secret: 'scratch-secret', action: 'seed', tasks: [], rewards: [] }).getContent())
-    check('seed fills empty tabs then refuses once seeded', seedRes.ok === true && seedRes.rewards === 1 && reseedRes.ok === false && reseedRes.code === 'invalid')
+    var seedRes = JSON.parse(
+      handleRequest(ctx, {
+        secret: 'scratch-secret',
+        action: 'seed',
+        tasks: [],
+        rewards: [
+          {
+            v: 1,
+            id: 'r1',
+            name: 'Bath',
+            cost: 15,
+            kind: 'solo',
+            archived: false,
+            updatedAt: new Date().toISOString(),
+            updatedBy: 'ana',
+          },
+        ],
+      }).getContent(),
+    )
+    var reseedRes = JSON.parse(
+      handleRequest(ctx, { secret: 'scratch-secret', action: 'seed', tasks: [], rewards: [] }).getContent(),
+    )
+    check(
+      'seed fills empty tabs then refuses once seeded',
+      seedRes.ok === true && seedRes.rewards === 1 && reseedRes.ok === false && reseedRes.code === 'invalid',
+    )
 
     // 6. Lock is released on an error path: force a broken sheet lookup mid-handler.
     var brokenCtx = {
@@ -507,7 +638,24 @@ function test_() {
     var beforeLockTest = LockService.getScriptLock()
     var lockAcquiredBeforeTest = beforeLockTest.tryLock(1000)
     if (lockAcquiredBeforeTest) beforeLockTest.releaseLock()
-    var failing = JSON.parse(handleRequest(brokenCtx, { secret: 'scratch-secret', action: 'events.append', events: [{ v: 1, id: 'e3', type: 'complete', actorUid: 'ana', at: new Date().toISOString(), taskId: 'pots', forUid: 'ana', points: 1 }] }).getContent())
+    var failing = JSON.parse(
+      handleRequest(brokenCtx, {
+        secret: 'scratch-secret',
+        action: 'events.append',
+        events: [
+          {
+            v: 1,
+            id: 'e3',
+            type: 'complete',
+            actorUid: 'ana',
+            at: new Date().toISOString(),
+            taskId: 'pots',
+            forUid: 'ana',
+            points: 1,
+          },
+        ],
+      }).getContent(),
+    )
     var lockAfterTest = LockService.getScriptLock()
     var lockFreeAfter = lockAfterTest.tryLock(1000)
     if (lockFreeAfter) lockAfterTest.releaseLock()

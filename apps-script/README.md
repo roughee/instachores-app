@@ -11,7 +11,7 @@ bound Apps Script web app: one `doPost`, one deployment, one URL. See
   `setupTemplate_()` and `test_()` helpers. Plain Apps Script JavaScript, V8
   runtime, no modules.
 - `appsscript.json`: manifest (`timeZone: Europe/Vilnius`, `runtimeVersion:
-  V8`, web app `executeAs: USER_DEPLOYING`, `access: ANYONE`).
+V8`, web app `executeAs: USER_DEPLOYING`, `access: ANYONE`).
 - `.clasp.json.example`: copy to `.clasp.json` and fill in your own
   `scriptId`. The real `.clasp.json` is gitignored; it names a specific
   script and must never be committed.
@@ -23,13 +23,13 @@ field names in `src/schemas/` exactly, all cells formatted as plain text
 (`@` number format) so the script can read and write dates and numbers as
 strings without Sheets reformatting them.
 
-| Tab | Shape | Header row |
-|---|---|---|
-| `household` | key/value, one row per key | `key`, `value` |
-| `members` | one row per member | `uid`, `name`, `color`, `role` |
-| `tasks` | one row per task | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `archived`, `sort`, `updatedAt`, `updatedBy` |
-| `rewards` | one row per reward | `v`, `id`, `name`, `cost`, `kind`, `commitment`, `archived`, `updatedAt`, `updatedBy` |
-| `events` | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day` |
+| Tab         | Shape                          | Header row                                                                                                                              |
+| ----------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `household` | key/value, one row per key     | `key`, `value`                                                                                                                          |
+| `members`   | one row per member             | `uid`, `name`, `color`, `role`                                                                                                          |
+| `tasks`     | one row per task               | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `archived`, `sort`, `updatedAt`, `updatedBy`      |
+| `rewards`   | one row per reward             | `v`, `id`, `name`, `cost`, `kind`, `commitment`, `archived`, `updatedAt`, `updatedBy`                                                   |
+| `events`    | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day` |
 
 The `household` tab holds one row per key below the header, e.g.:
 
@@ -150,7 +150,7 @@ loads the file for real. `Code.js` finishes by assigning its testable
 surface to `globalThis.HomeCrew`; that is the one thing the loader reads
 back out afterwards (and immediately deletes off `globalThis`).
 
-This was chosen over the alternative (wrapping the whole file as the *body*
+This was chosen over the alternative (wrapping the whole file as the _body_
 of one `new Function(...)` call and returning an object from it) because
 Apps Script itself needs `doPost`, `setupTemplate_` and `test_` to be
 ordinary top-level function declarations — that is how the editor's "run

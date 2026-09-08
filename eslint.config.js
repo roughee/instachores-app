@@ -6,8 +6,9 @@ import configPrettier from 'eslint-config-prettier'
 
 /**
  * Dependency direction, docs/Architecture.md §2: dependencies point downward
- * only. `domain/` imports nothing but `schemas/`. `data/` imports `schemas/`
- * (and `idb-keyval`), never `vue`, `pinia`, `stores/` or `domain/`.
+ * only. `domain/` imports nothing but `schemas/`. `data/` imports `schemas/`,
+ * `domain/` (seed and demo data) and `idb-keyval`, never `vue`, `pinia` or
+ * `stores/`.
  */
 const noVueOrPinia = [
   {
@@ -47,10 +48,6 @@ const dataRestrictions = {
       group: ['@/stores/*', '@/stores/**', '../stores/*', '../stores/**', '../../stores/*', '../../stores/**'],
       message: 'docs/Architecture.md §2: the data layer must not import app state (stores).',
     },
-    {
-      group: ['@/domain/*', '@/domain/**', '../domain/*', '../domain/**', '../../domain/*', '../../domain/**'],
-      message: 'docs/Architecture.md §2: the data layer imports schemas only, not the domain layer.',
-    },
   ],
 }
 
@@ -89,6 +86,29 @@ export default tseslint.config(
     files: ['**/data/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', dataRestrictions],
+    },
+  },
+  {
+    // Apps Script: plain scripts against the GAS globals; doPost, test_ and
+    // setupTemplate_ are entry points the runtime calls, not dead code.
+    files: ['apps-script/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        SpreadsheetApp: 'readonly',
+        LockService: 'readonly',
+        PropertiesService: 'readonly',
+        ContentService: 'readonly',
+        DriveApp: 'readonly',
+        Logger: 'readonly',
+        globalThis: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^(doPost|doGet|test_|setupTemplate_)$' },
+      ],
     },
   },
   configPrettier,

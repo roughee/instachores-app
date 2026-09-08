@@ -1,7 +1,7 @@
 ---
 name: Design
 about: A UI or visual design question for one screen
-title: "[Design] "
+title: '[Design] '
 labels: design, needs-spec
 ---
 
