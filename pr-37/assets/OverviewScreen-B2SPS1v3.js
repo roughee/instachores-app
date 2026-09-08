@@ -1,1 +1,0 @@
-import{_ as e,b as t,m as n,o as r,u as i}from"./index-yoDl0sy6.js";import{t as a}from"./EmptyState-CkjKnuYT.js";var o=n({__name:`OverviewScreen`,setup(n){return(n,o)=>(e(),i(a,{icon:t(r),label:`Review the week and month once there is data to show.`},null,8,[`icon`]))}});export{o as default};
