@@ -14,7 +14,7 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
-      include: ['src/domain/**', 'src/schemas/**', 'src/data/**', 'src/stores/**'],
+      include: ['src/domain/**', 'src/schemas/**', 'src/data/**', 'src/stores/**', 'src/composables/**'],
       reporter: ['text', 'html'],
       // Plan §7.5: 100% line coverage on the pure layers, 80% elsewhere.
       thresholds: {

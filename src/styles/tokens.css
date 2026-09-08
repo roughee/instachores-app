@@ -1,0 +1,117 @@
+/**
+ * Semantic color tokens (DESIGN.md §3). This is the ONLY file in the app
+ * allowed to contain hex literals; everything else reads these custom
+ * properties. `-soft` category tints are derived once, here, with
+ * color-mix so they stay correct whichever theme is active.
+ *
+ * Theme resolution order:
+ *   1. [data-theme="dark"] / [data-theme="light"]: an explicit user choice
+ *      (Settings), set by src/composables/useTheme.ts and, before the
+ *      bundle loads, by the inline bootstrap script in index.html.
+ *   2. No data-theme attribute ("system"): prefers-color-scheme decides.
+ */
+
+:root {
+  color-scheme: light;
+  --bg: #F6F4EF;
+  --surface: #FDFCF9;
+  --surface-2: #EFECE4;
+  --border: #E1DDD3;
+  --text: #1E1D1A;
+  --text-2: #5F5C55;
+  --primary: #1F8A70;
+  --on-primary: #FFFFFF;
+  --primary-soft: #DDF2EC;
+  --points: #C98A1E;
+  --success: #2F8F4E;
+  --warn: #B9741C;
+  --danger: #B8433A;
+  --cat-kitchen: #D9603F;
+  --cat-laundry: #3F6FD4;
+  --cat-floors: #7A5AD9;
+  --cat-bathroom: #2492A8;
+  --cat-kids: #C9508C;
+  --cat-home: #5A9A3A;
+  --cat-admin: #6B6F7A;
+
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --radius-chip: 999px;
+  --radius-sheet: 28px;
+  --gutter: 16px;
+  --card-pad: 16px;
+  --list-gap: 8px;
+  --touch: 48px;
+  --dur-press: 120ms;
+  --dur-sheet: 200ms;
+  --dur-count: 300ms;
+
+  /* Category tints for tile backgrounds, derived from the hue above. */
+  --cat-kitchen-soft: color-mix(in oklab, var(--cat-kitchen) 14%, var(--surface));
+  --cat-laundry-soft: color-mix(in oklab, var(--cat-laundry) 14%, var(--surface));
+  --cat-floors-soft: color-mix(in oklab, var(--cat-floors) 14%, var(--surface));
+  --cat-bathroom-soft: color-mix(in oklab, var(--cat-bathroom) 14%, var(--surface));
+  --cat-kids-soft: color-mix(in oklab, var(--cat-kids) 14%, var(--surface));
+  --cat-home-soft: color-mix(in oklab, var(--cat-home) 14%, var(--surface));
+  --cat-admin-soft: color-mix(in oklab, var(--cat-admin) 14%, var(--surface));
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131512;
+  --surface: #1C1F1C;
+  --surface-2: #262A26;
+  --border: #33382F;
+  --text: #EDEBE4;
+  --text-2: #A7A59C;
+  --primary: #4FD1B3;
+  --on-primary: #0E2A23;
+  --primary-soft: #1C3A33;
+  --points: #F2B85B;
+  --success: #6CCB8A;
+  --warn: #E8A33D;
+  --danger: #F07A70;
+  --cat-kitchen: #F08A6A;
+  --cat-laundry: #7FA3F0;
+  --cat-floors: #A88DF0;
+  --cat-bathroom: #5FC5D8;
+  --cat-kids: #EA84B6;
+  --cat-home: #8FC96C;
+  --cat-admin: #A0A4AE;
+}
+
+/* System theme (no explicit data-theme): follow the OS, unless the user
+   picked "light" explicitly, in which case that choice wins. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131512;
+    --surface: #1C1F1C;
+    --surface-2: #262A26;
+    --border: #33382F;
+    --text: #EDEBE4;
+    --text-2: #A7A59C;
+    --primary: #4FD1B3;
+    --on-primary: #0E2A23;
+    --primary-soft: #1C3A33;
+    --points: #F2B85B;
+    --success: #6CCB8A;
+    --warn: #E8A33D;
+    --danger: #F07A70;
+    --cat-kitchen: #F08A6A;
+    --cat-laundry: #7FA3F0;
+    --cat-floors: #A88DF0;
+    --cat-bathroom: #5FC5D8;
+    --cat-kids: #EA84B6;
+    --cat-home: #8FC96C;
+    --cat-admin: #A0A4AE;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-press: 0ms;
+    --dur-sheet: 0ms;
+    --dur-count: 0ms;
+  }
+}
