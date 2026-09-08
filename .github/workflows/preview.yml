@@ -1,0 +1,67 @@
+name: preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: pages-preview-${{ github.event.number }}
+  cancel-in-progress: true
+jobs:
+  deploy-preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+        env:
+          VITE_BASE: /instachores-app/pr-${{ github.event.number }}/
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: pr-${{ github.event.number }}
+          # Publishing to a subfolder still replaces the whole branch by
+          # default; keep the main build and every other preview in place.
+          keep_files: true
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview-url
+          message: |
+            Preview build is up: https://roughee.github.io/instachores-app/pr-${{ github.event.number }}/#/log
+
+            (The trailing slash before `#/log` matters, a refresh needs it to find its assets.)
+  remove-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove preview folder from gh-pages
+        run: |
+          if ! git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            echo "gh-pages branch does not exist yet, nothing to remove."
+            exit 0
+          fi
+          git fetch origin gh-pages
+          git switch gh-pages
+          if [ -d "pr-${{ github.event.number }}" ]; then
+            git rm -r "pr-${{ github.event.number }}"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: remove preview for pr-${{ github.event.number }}"
+            git push origin gh-pages
+          else
+            echo "No preview folder for pr-${{ github.event.number }}, nothing to remove."
+          fi
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview-url
+          message: |
+            Preview build was removed.
