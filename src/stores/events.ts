@@ -14,6 +14,7 @@ import { mergeEvents } from '@/data/merge'
 import { detectCombos } from '@/domain/combos'
 import { deriveState, rollupForWeek } from '@/domain/derive'
 import type { Derived, WeekRollup } from '@/domain/derive'
+import { liveEvents } from '@/domain/events'
 import { DAY_MS, dayKey, localMidnight, shiftDay, startOfMonth, startOfWeek } from '@/domain/time'
 import { Category, ChoreEvent } from '@/schemas'
 import type { ChoreEvent as ChoreEventT, EventOf } from '@/schemas'
@@ -161,6 +162,44 @@ export const useEventsStore = defineStore('events', () => {
   function nextWeek(): void {
     weekOffset.value = Math.min(0, weekOffset.value + 1)
   }
+  /** "You today" (Plan §5.5 Log): today's complete points credited to the
+   * current member, adult tasks only (a kid task's points go to `stars`,
+   * not this member's own point total). */
+  const youToday = computed<number>(() => {
+    const householdStore = useHouseholdStore()
+    const catalogStore = useCatalogStore()
+    const member = householdStore.currentMember
+    if (!member || !householdStore.household) return 0
+    const tz = householdStore.household.tz
+    const today = dayKey(clockNow.value, tz)
+    let total = 0
+    for (const e of liveEvents(events.value)) {
+      if (e.type !== 'complete' || e.forUid !== member.uid) continue
+      if (dayKey(e.at, tz) !== today) continue
+      if (catalogStore.byId.get(e.taskId)?.forRole === 'kid') continue
+      total += e.points
+    }
+    return total
+  })
+
+  /** Who completed each task today, for the avatar dots on `TaskButton` /
+   * `CategoryTile` (DESIGN.md §5): one uid per completion, so a task done
+   * twice by the same member has that uid twice. */
+  const doneTodayByTask = computed<Map<string, string[]>>(() => {
+    const householdStore = useHouseholdStore()
+    const map = new Map<string, string[]>()
+    if (!householdStore.household) return map
+    const tz = householdStore.household.tz
+    const today = dayKey(clockNow.value, tz)
+    for (const e of liveEvents(events.value)) {
+      if (e.type !== 'complete') continue
+      if (dayKey(e.at, tz) !== today) continue
+      const list = map.get(e.taskId)
+      if (list) list.push(e.forUid)
+      else map.set(e.taskId, [e.forUid])
+    }
+    return map
+  })
 
   function applyLocal(e: ChoreEventT): void {
     events.value = mergeEvents(events.value, [e])
@@ -268,5 +307,19 @@ export const useEventsStore = defineStore('events', () => {
     return { ok: true }
   }
 
-  return { events, recentlyLogged, derived, weekOffset, weekRollup, bind, unbind, complete, undo, prevWeek, nextWeek }
+  return {
+    events,
+    recentlyLogged,
+    derived,
+    youToday,
+    doneTodayByTask,
+    weekOffset,
+    weekRollup,
+    bind,
+    unbind,
+    complete,
+    undo,
+    prevWeek,
+    nextWeek,
+  }
 })

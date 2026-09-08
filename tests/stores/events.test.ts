@@ -9,7 +9,7 @@ import { configureSession, useSessionStore } from '@/stores/session'
 import { useCatalogStore } from '@/stores/catalog'
 import { useEventsStore } from '@/stores/events'
 import { useHouseholdStore } from '@/stores/household'
-import { ANA, BEN, HID, NOW, TZ, household, task } from '../helpers/fixtures'
+import { ANA, BEN, HID, MIA, NOW, TZ, household, task } from '../helpers/fixtures'
 import { idCounter } from '../helpers/testRepo'
 
 function unused(): never {
@@ -201,6 +201,104 @@ describe('eventsStore.derived', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('eventsStore.youToday', () => {
+  it('sums today’s complete points credited to the current member, adult tasks only', async () => {
+    const pots = task({ id: 'task-pots', points: 4 })
+    const kidTask = task({ id: 'task-kid', points: 2, forRole: 'kid', category: 'kid' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots, kidTask] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    await eventsStore.complete('task-kid', { forUid: MIA })
+
+    expect(eventsStore.youToday).toBe(4)
+  })
+
+  it('does not count a completion credited to someone else', async () => {
+    const pots = task({ id: 'task-pots', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots', { forUid: BEN })
+
+    expect(eventsStore.youToday).toBe(0)
+  })
+
+  it('does not count a completion logged on an earlier day', async () => {
+    const pots = task({ id: 'task-pots', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots', { at: new Date(NOW.getTime() - DAY_MS) })
+
+    expect(eventsStore.youToday).toBe(0)
+  })
+
+  it('ignores an event undone within its window', async () => {
+    const pots = task({ id: 'task-pots', points: 3 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    eventsStore.undo(original.id)
+
+    expect(eventsStore.youToday).toBe(0)
+  })
+
+  it('is 0 before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.youToday).toBe(0)
+  })
+})
+
+describe('eventsStore.doneTodayByTask', () => {
+  it('lists the forUid of each of today’s completions for a task, one entry per event', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    await eventsStore.complete('task-pots', { forUid: BEN })
+
+    expect(eventsStore.doneTodayByTask.get('task-pots')).toEqual([ANA, BEN])
+  })
+
+  it('excludes a completion undone within its window', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    eventsStore.undo(original.id)
+
+    expect(eventsStore.doneTodayByTask.get('task-pots')).toBeUndefined()
+  })
+
+  it('excludes a completion from an earlier day', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots', { at: new Date(NOW.getTime() - DAY_MS) })
+
+    expect(eventsStore.doneTodayByTask.get('task-pots')).toBeUndefined()
+  })
+
+  it('is empty before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.doneTodayByTask.size).toBe(0)
   })
 })
 
