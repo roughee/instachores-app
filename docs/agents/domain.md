@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root: the shared vocabulary ("event", "complete", "combo", "claim", "ack", "household bar", "quick row", "group task", "sub-item", "star").
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. ADR-0001 records the Google Sheet data layer; append-only events and Vue over React are next (Plan §7.2).
+- **`docs/adr/`**: read ADRs that touch the area you're about to work in. ADR-0001 records the Google Sheet data layer, ADR-0002 append-only events with derived state, ADR-0003 Vue 3 over React and Svelte (Plan §7.2).
 - **`docs/Plan.md`**: the product plan. §3 is the task catalog, §5 the pages and their acceptance criteria, §6 the architecture summary, §7 the process.
 - **`docs/Architecture.md`**: the detailed architecture: layers, data flow, sheet layout, Apps Script API, sync, identity, testing map.
 - **`docs/design/DESIGN.md`**: tokens, dials, design read, and the UI pre-flight for any UI work.
@@ -25,7 +25,7 @@ Single-context repo:
 │   ├── adr/
 │   │   ├── 0001-google-sheet-as-mvp-database.md
 │   │   ├── 0002-append-only-events.md
-│   │   └── 0003-vue-over-react.md
+│   │   └── 0003-vue-over-react-and-svelte.md
 │   ├── design/DESIGN.md
 │   ├── specs/
 │   └── agents/          <- this folder
