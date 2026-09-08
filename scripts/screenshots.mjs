@@ -140,3 +140,15 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 16-welcome-error-${scheme}.png`)
 }
+
+// Issue #19: the week overview with a few demo logs, so the member split and
+// the split bars have data (household bar shared with the Log screen).
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3#/overview`, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Previous week' }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}19-overview-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 19-overview-${scheme}.png`)
+}

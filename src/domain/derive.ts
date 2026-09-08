@@ -8,7 +8,7 @@ import { allCombos } from './combos'
 import { completes, liveEvents } from './events'
 import { isDue } from './schedule'
 import { DEFAULT_QUICK_ROW, SEED_IDS } from './seed'
-import { DAY_MS, dayKey, daysInMonth, shiftDay, startOfMonth, startOfWeek } from './time'
+import { DAY_MS, dayKey, daysInMonth, localMidnight, shiftDay, startOfMonth, startOfWeek } from './time'
 
 export interface Rollup {
   household: number
@@ -16,6 +16,91 @@ export interface Rollup {
   byMember: Record<string, { points: number; count: number }>
   byCategory: Partial<Record<Category, Record<string, number>>>
   combos: { name: string; count: number }[]
+}
+
+/** A week's `Rollup` plus the period it covers and how far into it `now` falls (Plan §5.5, issue #19). */
+export interface WeekRollup extends Rollup {
+  /** Monday 00:00 household-local. */
+  start: Date
+  /** The following Monday 00:00 household-local (exclusive). */
+  end: Date
+  /** 1 to 7; 7 once `now` reaches `end`. */
+  elapsedDays: number
+  /** `target` scaled by `elapsedDays / 7`, rounded; equals `target` once the week is over. */
+  proRatedTarget: number
+}
+
+/**
+ * Sums live events into a `Rollup` over `[start, end)`; `end` of `undefined`
+ * means "no upper bound" (deriveState's current week/month, where nothing
+ * logged is ever after `now`). Shared by `deriveState` and `rollupForWeek`
+ * so the household/member/category math for a period lives in one place.
+ */
+function computeRollup(
+  live: readonly ChoreEvent[],
+  taskById: Map<string, Task>,
+  comboCategory: Map<string, Category>,
+  isKidTask: (taskId: string) => boolean,
+  start: Date,
+  end: Date | undefined,
+  target: number,
+): Rollup {
+  const byMember: Rollup['byMember'] = {}
+  const byCategory: Rollup['byCategory'] = {}
+  const comboCounts = new Map<string, number>()
+  const credit = (uid: string, category: Category, points: number, isComplete: boolean) => {
+    const m = (byMember[uid] ??= { points: 0, count: 0 })
+    m.points += points
+    if (isComplete) m.count += 1
+    const per = (byCategory[category] ??= {})
+    per[uid] = (per[uid] ?? 0) + points
+  }
+  for (const e of live) {
+    if (e.at.getTime() < start.getTime()) continue
+    if (end !== undefined && e.at.getTime() >= end.getTime()) continue
+    if (e.type === 'complete' && !isKidTask(e.taskId)) {
+      credit(e.forUid, taskById.get(e.taskId)?.category ?? 'admin', e.points, true)
+    } else if (e.type === 'bonus') {
+      credit(e.forUid, comboCategory.get(e.combo) ?? 'admin', e.points, false)
+      comboCounts.set(e.combo, (comboCounts.get(e.combo) ?? 0) + 1)
+    }
+  }
+  const household = Object.values(byMember).reduce((s, m) => s + m.points, 0)
+  const combos = [...comboCounts].map(([name, count]) => ({ name, count }))
+  return { household, target, byMember, byCategory, combos }
+}
+
+/**
+ * The `Rollup` for one Monday-to-Monday week, given its `weekStart` (issue
+ * #19, Plan §5.5 `#/overview`). Pure and standalone so the Overview screen
+ * can page through past weeks without touching `deriveState`'s current-week
+ * assumptions. `elapsedDays`/`proRatedTarget` let a partial week show a
+ * target scaled to today instead of the full weekly one.
+ */
+export function rollupForWeek(input: {
+  events: readonly ChoreEvent[]
+  tasks: readonly Task[]
+  household: Household
+  weekStart: Date
+  now: Date
+}): WeekRollup {
+  const { events, tasks, household, weekStart, now } = input
+  const tz = household.tz
+  const taskById = new Map(tasks.map((t) => [t.id, t]))
+  const isKidTask = (taskId: string) => taskById.get(taskId)?.forRole === 'kid'
+  const comboCategory = new Map(allCombos(tasks).map((c) => [c.key, c.category]))
+  const live = [...liveEvents(events)].sort((a, b) => a.at.getTime() - b.at.getTime())
+
+  const endKey = shiftDay(dayKey(weekStart, tz), 7)
+  const [endYear, endMonth, endDay] = endKey.split('-').map(Number) as [number, number, number]
+  const end = localMidnight(endYear, endMonth, endDay, tz)
+
+  const elapsedMs = Math.min(Math.max(now.getTime() - weekStart.getTime(), 0), end.getTime() - weekStart.getTime())
+  const elapsedDays = Math.min(7, Math.max(1, Math.floor(elapsedMs / DAY_MS) + 1))
+  const proRatedTarget = Math.round((household.weeklyTarget * elapsedDays) / 7)
+
+  const rollup = computeRollup(live, taskById, comboCategory, isKidTask, weekStart, end, household.weeklyTarget)
+  return { ...rollup, start: weekStart, end, elapsedDays, proRatedTarget }
 }
 
 export interface PendingClaim {
@@ -136,32 +221,24 @@ export function deriveState(input: DeriveInput): Derived {
 
   // Rollups.
   const comboCategory = new Map(allCombos(tasks).map((c) => [c.key, c.category]))
-  const rollup = (start: Date, target: number): Rollup => {
-    const byMember: Rollup['byMember'] = {}
-    const byCategory: Rollup['byCategory'] = {}
-    const comboCounts = new Map<string, number>()
-    const credit = (uid: string, category: Category, points: number, isComplete: boolean) => {
-      const m = (byMember[uid] ??= { points: 0, count: 0 })
-      m.points += points
-      if (isComplete) m.count += 1
-      const per = (byCategory[category] ??= {})
-      per[uid] = (per[uid] ?? 0) + points
-    }
-    for (const e of live) {
-      if (e.at.getTime() < start.getTime()) continue
-      if (e.type === 'complete' && !isKidTask(e.taskId)) {
-        credit(e.forUid, taskById.get(e.taskId)?.category ?? 'admin', e.points, true)
-      } else if (e.type === 'bonus') {
-        credit(e.forUid, comboCategory.get(e.combo) ?? 'admin', e.points, false)
-        comboCounts.set(e.combo, (comboCounts.get(e.combo) ?? 0) + 1)
-      }
-    }
-    const household = Object.values(byMember).reduce((s, m) => s + m.points, 0)
-    const combos = [...comboCounts].map(([name, count]) => ({ name, count }))
-    return { household, target, byMember, byCategory, combos }
-  }
-  const week = rollup(startOfWeek(now, tz), household.weeklyTarget)
-  const month = rollup(startOfMonth(now, tz), Math.round((household.weeklyTarget * daysInMonth(now, tz)) / 7))
+  const week = computeRollup(
+    live,
+    taskById,
+    comboCategory,
+    isKidTask,
+    startOfWeek(now, tz),
+    undefined,
+    household.weeklyTarget,
+  )
+  const month = computeRollup(
+    live,
+    taskById,
+    comboCategory,
+    isKidTask,
+    startOfMonth(now, tz),
+    undefined,
+    Math.round((household.weeklyTarget * daysInMonth(now, tz)) / 7),
+  )
 
   // Counters: heat strip and streak.
   const countersDays = new Set(done.filter((c) => c.taskId === keys.counters).map((c) => dayKey(c.at, tz)))

@@ -217,3 +217,21 @@ describe('sessionStore.disconnect', () => {
     expect(() => useSessionStore().disconnect()).not.toThrow()
   })
 })
+
+describe('session.ready without resume', () => {
+  it('resolves after startDemo, so the router guard never hangs on a demo boot', async () => {
+    configureSession({
+      storage: fakeStorage(),
+      createSheetsRepo: unusedDemo,
+      createDemoRepo: () => new FakeSheetsRepo([{ id: HID, household: household() }]),
+      now: () => NOW,
+    })
+    const session = useSessionStore()
+    await session.startDemo(NOW)
+    const settled = await Promise.race([
+      session.ready.then(() => 'ready'),
+      new Promise((r) => setTimeout(() => r('hung'), 50)),
+    ])
+    expect(settled).toBe('ready')
+  })
+})
