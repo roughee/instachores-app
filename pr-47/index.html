@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#131512" />
+    <title>HomeCrew</title>
+    <script>
+      // Applies the stored theme preference before the bundle loads, so the
+      // first paint is never wrong (no light-then-dark flash). Mirrors
+      // src/composables/useTheme.ts readPrefs + applyTheme, kept deliberately
+      // dependency-free since it must run synchronously, inline, before Zod
+      // or Vue are available. `system` (the default) sets nothing, letting
+      // the `prefers-color-scheme` media query in tokens.css take over.
+      ;(function () {
+        try {
+          var raw = localStorage.getItem('homecrew.prefs')
+          if (!raw) return
+          var prefs = JSON.parse(raw)
+          if (prefs && (prefs.theme === 'light' || prefs.theme === 'dark')) {
+            document.documentElement.setAttribute('data-theme', prefs.theme)
+          }
+        } catch (e) {
+          // Corrupt or inaccessible storage: fall through to the system theme.
+        }
+      })()
+    </script>
+    <script type="module" crossorigin src="/instachores-app/pr-47/assets/index-BTTUa9jL.js"></script>
+    <link rel="modulepreload" crossorigin href="/instachores-app/pr-47/assets/_plugin-vue_export-helper-CDkyXmqk.js">
+    <link rel="stylesheet" crossorigin href="/instachores-app/pr-47/assets/index-ngAZijo-.css">
+  <link rel="manifest" href="/instachores-app/pr-47/manifest.webmanifest"></head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
