@@ -56,6 +56,10 @@ onMounted(() => {
  * phone is connected with, not a freshly-generated one. */
 const { url: setupLinkUrl, copy: copySetupLink } = useSetupLinkUrl(() => sessionStore.link)
 
+/** issue #46: the demo household's link is `https://demo.invalid/exec` and cannot connect a
+ * partner's phone, so demo mode shows a hint instead of a link that looks shareable. */
+const isDemoMode = computed<boolean>(() => sessionStore.mode === 'demo')
+
 async function onCopyLink(): Promise<void> {
   if (!setupLinkUrl.value) return
   await copySetupLink()
@@ -117,7 +121,10 @@ async function onDisconnect(): Promise<void> {
         <h2 id="settings-household-heading" class="settings-screen__section-title">Household</h2>
         <p class="settings-screen__household-name">{{ householdStore.household.name }}</p>
 
-        <label class="settings-screen__field" for="settings-setup-link">
+        <p v-if="isDemoMode" class="settings-screen__hint" data-test="setup-link-hint">
+          Connect a real household to share a setup link.
+        </p>
+        <label v-else class="settings-screen__field" for="settings-setup-link">
           <span class="settings-screen__field-label">Setup link</span>
           <span class="settings-screen__field-control">
             <input

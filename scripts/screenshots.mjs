@@ -212,10 +212,11 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
 }
 
 // Issue #21: Settings (household + setup link, appearance, sync panel,
-// disconnect, about). Demo mode is fine for the screenshot: MemoryRepo has
-// no real setup link to show, but the demo one still round-trips the URL.
-// A tall viewport (instead of `fullPage`) keeps the whole screen in one
-// shot without the fixed bottom tab bar repeating mid-page.
+// disconnect, about). Demo mode shows the household section's demo hint
+// (issue #46) rather than the internal `https://demo.invalid/exec` link,
+// which cannot connect a partner's phone. A tall viewport (instead of
+// `fullPage`) keeps the whole screen in one shot without the fixed bottom
+// tab bar repeating mid-page.
 for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   const browser = await chromium.launch({ executablePath })
   const page = await browser.newPage({ viewport: { width: 390, height: 1500 }, colorScheme: scheme })
