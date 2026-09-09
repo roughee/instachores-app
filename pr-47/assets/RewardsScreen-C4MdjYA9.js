@@ -1,1 +1,0 @@
-import{p as e,q as t,s as n,w as r}from"./_plugin-vue_export-helper-CDkyXmqk.js";import{v as i}from"./index-BTTUa9jL.js";import{t as a}from"./EmptyState-DghpqaZZ.js";var o=e({__name:`RewardsScreen`,setup(e){return(e,o)=>(r(),n(a,{icon:t(i),label:`Turn points into rest once rewards are set up.`},null,8,[`icon`]))}});export{o as default};
