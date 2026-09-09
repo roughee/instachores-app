@@ -34,6 +34,7 @@ import type { Theme } from '@/schemas'
 import { useHouseholdStore } from '@/stores/household'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
+import { buildId } from '@/buildId'
 import { version as appVersion } from '../../package.json'
 
 const REPO_URL = 'https://github.com/roughee/instachores-app'
@@ -42,7 +43,7 @@ const router = useRouter()
 const householdStore = useHouseholdStore()
 const sessionStore = useSessionStore()
 const syncStore = useSyncStore()
-const { showInstallCard, install, dismissInstallCard } = usePwa()
+const { showInstallCard, install, dismissInstallCard, swVersion } = usePwa()
 const { prefs, setTheme } = useTheme()
 const { toast, show, dismiss } = useToast()
 
@@ -200,7 +201,11 @@ async function onDisconnect(): Promise<void> {
           </div>
           <div class="settings-screen__stat">
             <dt>App build</dt>
-            <dd>{{ appVersion }}</dd>
+            <dd data-test="app-build-id">{{ buildId }}</dd>
+          </div>
+          <div class="settings-screen__stat">
+            <dt>Service worker</dt>
+            <dd data-test="sw-version">{{ swVersion ?? 'Not registered' }}</dd>
           </div>
           <div class="settings-screen__stat">
             <dt>Skipped rows</dt>

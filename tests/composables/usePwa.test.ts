@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 
 // `virtual:pwa-register/vue` only exists once vite-plugin-pwa's Vite plugin
 // runs; under Vitest it must be mocked so usePwa can be imported at all.
@@ -18,6 +19,7 @@ import {
   installCardVisible,
   isStandaloneDisplay,
   readPollIntervalMs,
+  readServiceWorkerVersion,
   usePwa,
 } from '@/composables/usePwa'
 import { withSetup } from '../helpers/withSetup'
@@ -163,5 +165,66 @@ describe('readPollIntervalMs (issue #22)', () => {
       window.history.replaceState({}, '', `/?pollMs=${bad}`)
       expect(readPollIntervalMs()).toBeUndefined()
     }
+  })
+})
+
+describe('readServiceWorkerVersion (issue #45, pure)', () => {
+  it('resolves undefined when nothing controls the page', async () => {
+    await expect(readServiceWorkerVersion({ controller: null })).resolves.toBeUndefined()
+  })
+
+  it('resolves undefined when navigator.serviceWorker does not exist at all (e.g. Vitest/happy-dom)', async () => {
+    await expect(readServiceWorkerVersion(undefined)).resolves.toBeUndefined()
+  })
+
+  it('posts a version request to the controller and resolves with its stamped reply', async () => {
+    const controller = {
+      postMessage: vi.fn((_message: unknown, transfer: Transferable[]) => {
+        const port = transfer[0] as MessagePort
+        port.postMessage({ version: 'abc1234' })
+      }),
+    }
+
+    await expect(readServiceWorkerVersion({ controller: controller as unknown as ServiceWorker })).resolves.toBe(
+      'abc1234',
+    )
+    expect(controller.postMessage).toHaveBeenCalledWith({ type: 'version' }, expect.any(Array))
+  })
+})
+
+describe('usePwa: service worker version (issue #45)', () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker')
+
+  afterEach(() => {
+    if (originalDescriptor) {
+      Object.defineProperty(navigator, 'serviceWorker', originalDescriptor)
+    } else {
+      Reflect.deleteProperty(navigator, 'serviceWorker')
+    }
+  })
+
+  it('has no swVersion when nothing controls the page, e.g. Vitest/happy-dom', async () => {
+    const [pwa] = withSetup(() => usePwa())
+    await flushPromises()
+
+    expect(pwa.swVersion.value).toBeUndefined()
+  })
+
+  it('a phone with a stale worker keeps showing its old build id until the update toast is accepted', async () => {
+    const controller = {
+      postMessage: vi.fn((_message: unknown, transfer: Transferable[]) => {
+        const port = transfer[0] as MessagePort
+        port.postMessage({ version: 'stale-abc1234' })
+      }),
+    }
+    Object.defineProperty(navigator, 'serviceWorker', { value: { controller }, configurable: true })
+
+    const [pwa] = withSetup(() => usePwa())
+    await flushPromises()
+
+    // The reply is the *old* worker's id: reopening a phone without
+    // accepting UpdateToast's reload never queries a different controller
+    // (Architecture.md §9) -- only the accepted reload swaps it in.
+    expect(pwa.swVersion.value).toBe('stale-abc1234')
   })
 })

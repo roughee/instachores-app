@@ -163,6 +163,19 @@ describe('SettingsScreen: sync panel', () => {
 
     expect(wrapper.text()).not.toContain('ev-broken')
   })
+
+  it('shows a non-empty App build id, distinct from the About section package.json version (issue #45)', async () => {
+    const { wrapper } = await connectAndMount()
+
+    expect(wrapper.get('[data-test="app-build-id"]').text().length).toBeGreaterThan(0)
+  })
+
+  it('shows "Not registered" for the service worker when nothing controls the page, e.g. Vitest/happy-dom (issue #45)', async () => {
+    const { wrapper } = await connectAndMount()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="sw-version"]').text()).toBe('Not registered')
+  })
 })
 
 describe('SettingsScreen: disconnect', () => {
