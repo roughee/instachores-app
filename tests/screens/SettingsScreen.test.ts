@@ -21,7 +21,18 @@ async function connectAndMount(): Promise<{ wrapper: ReturnType<typeof mount>; r
   const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
   configureSession({ storage: fakeStorage(), createSheetsRepo: () => repo, createDemoRepo: unusedDemo, now: () => NOW })
   await useSessionStore().connect(LINK, ANA)
+  return mountSettings()
+}
 
+/** issue #46: a demo-mode household, connected via `startDemo` rather than `connect`. */
+async function startDemoAndMount(): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
+  const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
+  configureSession({ storage: fakeStorage(), createSheetsRepo: unusedDemo, createDemoRepo: () => repo, now: () => NOW })
+  await useSessionStore().startDemo(NOW)
+  return mountSettings()
+}
+
+async function mountSettings(): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -68,6 +79,23 @@ describe('SettingsScreen: household', () => {
     expect(clipboard.writeText).toHaveBeenCalledTimes(1)
     expect(clipboard.writeText.mock.calls[0]?.[0]).toContain(encodeSetupLink(LINK))
     expect(wrapper.text()).toContain('Setup link copied')
+  })
+
+  it('shows no demo hint for a real (sheets-mode) household', async () => {
+    const { wrapper } = await connectAndMount()
+
+    expect(wrapper.find('[data-test="setup-link-hint"]').exists()).toBe(false)
+  })
+})
+
+describe('SettingsScreen: household (demo mode)', () => {
+  it('shows a hint instead of the setup link, with no Copy button, in demo mode', async () => {
+    const { wrapper } = await startDemoAndMount()
+
+    expect(wrapper.find('[data-test="setup-link"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="copy-link"]').exists()).toBe(false)
+    const hint = wrapper.get('[data-test="setup-link-hint"]')
+    expect(hint.text()).toBe('Connect a real household to share a setup link.')
   })
 })
 
