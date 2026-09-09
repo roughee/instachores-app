@@ -4,15 +4,27 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 import { resolveBase } from './vite.base'
+import { resolveBuildId } from './vite.buildId'
 
 // Plan §6.10 / issue #11: dark shell background and theme color so the
 // splash screen and status bar never flash light before the app paints.
 const SHELL_COLOR = '#131512'
 
+// Issue #45: stamped into both the app bundle and `src/sw.ts` via `define`
+// below (Architecture.md §9) so the Sync panel's "App build" and "Service
+// worker" rows change on every deploy.
+const BUILD_ID = resolveBuildId(process.env)
+
 export default defineConfig({
   // Plan §6.13 / issue #12: PR previews override VITE_BASE so the built
   // asset URLs resolve under `pr-<n>/` instead of the repo root.
   base: resolveBase(process.env),
+  // vite-plugin-pwa forwards `define` into the injectManifest service
+  // worker build too (its one shared option between the app and worker
+  // builds), which is how `src/sw.ts` sees the same `__BUILD_ID__`.
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   plugins: [
     vue(),
     VitePWA({
@@ -20,6 +32,20 @@ export default defineConfig({
       // (Architecture.md §9): auto-swapping mid-tap is how an event is lost.
       registerType: 'prompt',
       injectRegister: null,
+      // `injectManifest` (issue #45) instead of `generateSW`: a small,
+      // hand-written `src/sw.ts` is the only way to answer a `postMessage`
+      // with the worker's own stamped build id at runtime -- `generateSW`
+      // has no hook for that. It keeps the shell precache and the prompt
+      // update flow identical; see `src/sw.ts` for the runtime caching this
+      // config used to list under `workbox.runtimeCaching`.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        // Same globs `workbox.globPatterns` used under `generateSW`
+        // (fonts, icons and the app shell alongside the JS/CSS/HTML).
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+      },
       manifest: {
         name: 'HomeCrew',
         short_name: 'HomeCrew',
@@ -45,34 +71,6 @@ export default defineConfig({
           { name: 'Kitchen Reset', url: './#/log/kitchen' },
           { name: 'Log trash', url: './#/log/kitchen' },
           { name: 'Laundry', url: './#/log/laundry' },
-        ],
-      },
-      workbox: {
-        // Hash routing means every route is served from the same
-        // index.html; Workbox's default navigateFallback already covers
-        // this, listed explicitly so the intent survives a config refactor.
-        navigateFallback: 'index.html',
-        // Fonts (self-hosted @fontsource woff2) and the app icons precache
-        // alongside the shell, per Architecture.md §9.
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            // The Apps Script endpoint owns its own cache (the outbox and
-            // the snapshot in IndexedDB) -- the service worker must never
-            // serve a stale or cached response for it.
-            urlPattern: /^https:\/\/script\.google\.com\//,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /\.(?:woff2?|ttf)$/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'fonts' },
-          },
-          {
-            urlPattern: /\/icons\/.*\.png$/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'icons' },
-          },
         ],
       },
     }),

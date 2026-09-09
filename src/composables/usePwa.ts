@@ -69,12 +69,45 @@ export function flagValue(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name)
 }
 
+/**
+ * Reads the ACTIVE worker's stamped build id (issue #45), not the app
+ * bundle's `__BUILD_ID__`: a `postMessage({ type: 'version' })` handshake
+ * that `src/sw.ts` answers over a `MessageChannel` port. `undefined` with
+ * no controller -- the very first load before any worker controls the
+ * page, a non-secure context, or Vitest/happy-dom, none of which have
+ * `navigator.serviceWorker` at all. This is why a phone with a stale
+ * worker keeps showing that worker's old id (Settings' "Service worker"
+ * row) until the update toast is accepted: `usePwa` calls this once per
+ * page load, and the controller does not change until the accepted
+ * reload actually happens (Architecture.md §9).
+ */
+export function readServiceWorkerVersion(
+  serviceWorker: Pick<ServiceWorkerContainer, 'controller'> | undefined,
+): Promise<string | undefined> {
+  const controller = serviceWorker?.controller
+  if (!controller) return Promise.resolve(undefined)
+  return new Promise((resolve) => {
+    const channel = new MessageChannel()
+    channel.port1.onmessage = (event) => {
+      resolve((event.data as { version?: string } | undefined)?.version)
+    }
+    controller.postMessage({ type: 'version' }, [channel.port2])
+  })
+}
+
 export function usePwa() {
   const { needRefresh: swNeedRefresh, updateServiceWorker } = useRegisterSW({ immediate: true })
   const forceUpdateToast = hasFlag('forceUpdateToast')
   const forceInstallCard = hasFlag('forceInstallCard')
 
   const needRefresh = computed(() => forceUpdateToast || swNeedRefresh.value)
+
+  const swVersion = ref<string | undefined>(undefined)
+  onMounted(() => {
+    void readServiceWorkerVersion('serviceWorker' in navigator ? navigator.serviceWorker : undefined).then((v) => {
+      swVersion.value = v
+    })
+  })
 
   const canInstall = ref(forceInstallCard)
   const standalone = ref(
@@ -124,5 +157,5 @@ export function usePwa() {
     }),
   )
 
-  return { needRefresh, reload, canInstall, install, showInstallCard, dismissInstallCard }
+  return { needRefresh, reload, canInstall, install, showInstallCard, dismissInstallCard, swVersion }
 }
