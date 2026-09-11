@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { PhStar } from '@phosphor-icons/vue'
 import Celebration from '@/components/Celebration.vue'
 import { CELEBRATION_DURATION_MS, useCelebration } from '@/composables/useCelebration'
 
@@ -40,6 +41,12 @@ describe('Celebration', () => {
     trigger('var(--cat-laundry)')
     const wrapper = mount(Celebration)
     expect(wrapper.get('[data-test="celebration"]').attributes('style')).toContain('var(--cat-laundry)')
+  })
+
+  it('renders the icons with the fill weight, so a star is solid, not an outline (issue #61)', () => {
+    triggerExact('star-catch', 'var(--cat-kitchen)')
+    const wrapper = mount(Celebration)
+    expect(wrapper.findComponent(PhStar).props('weight')).toBe('fill')
   })
 
   it('is empty when nothing was just logged', () => {
