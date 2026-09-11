@@ -1,0 +1,1 @@
+import{p as e,q as t,s as n,w as r}from"./_plugin-vue_export-helper-CDkyXmqk.js";import{P as i}from"./index-XWFv0vnV.js";import{t as a}from"./EmptyState-DghpqaZZ.js";var o=e({__name:`KidScreen`,setup(e){return(e,o)=>(r(),n(a,{icon:t(i),label:`Show off stars once the star board is built.`},null,8,[`icon`]))}});export{o as default};
