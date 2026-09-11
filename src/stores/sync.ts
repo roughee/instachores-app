@@ -8,7 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { HouseholdRepo, RepoStatus, SkippedRow, SyncResult, Unsubscribe } from '@/data/repo'
-import { isVersionCapable } from './sessionOptions'
+import { isForegroundSyncable, isVersionCapable } from './sessionOptions'
 
 export const useSyncStore = defineStore('sync', () => {
   const online = ref(true)
@@ -46,9 +46,15 @@ export const useSyncStore = defineStore('sync', () => {
     scriptVersion.value = undefined
   }
 
-  /** Calls `repo.sync()` once. A no-op returning `undefined` when nothing is bound. */
+  /**
+   * Calls `repo.sync()` once, as a foreground/user-triggered sync
+   * (`syncForeground()`, issue #52) when the bound repo distinguishes that
+   * from the poller's own timer. A no-op returning `undefined` when nothing
+   * is bound.
+   */
   async function syncNow(): Promise<SyncResult | undefined> {
     if (!boundRepo) return undefined
+    if (isForegroundSyncable(boundRepo)) return boundRepo.syncForeground()
     return boundRepo.sync()
   }
 

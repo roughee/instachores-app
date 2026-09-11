@@ -75,6 +75,20 @@ describe('syncStore.syncNow', () => {
     const store = useSyncStore()
     await expect(store.syncNow()).resolves.toBeUndefined()
   })
+
+  it('calls syncForeground() instead of sync() for a repo that has one, such as SheetsRepo (#52)', async () => {
+    const repo = new FakeSheetsRepo([{ id: HID, household: household() }])
+    const syncForeground = vi.fn(async () => ({ pending: 0, syncedAt: new Date() }))
+    const withForegroundSync = Object.assign(repo, { syncForeground })
+    const sync = vi.spyOn(withForegroundSync, 'sync')
+    const store = useSyncStore()
+    store.bind(withForegroundSync)
+
+    await store.syncNow()
+
+    expect(syncForeground).toHaveBeenCalledTimes(1)
+    expect(sync).not.toHaveBeenCalled()
+  })
 })
 
 describe('syncStore.scriptVersion', () => {

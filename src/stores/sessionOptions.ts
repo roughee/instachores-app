@@ -50,6 +50,22 @@ export function isVersionCapable(repo: HouseholdRepo): repo is HouseholdRepo & V
   return typeof (repo as Partial<VersionCapable>).version === 'function'
 }
 
+/**
+ * A repo that distinguishes a user- or foreground-triggered sync from the
+ * poller's own timer (issue #52): `SheetsRepo` refreshes the whole catalog
+ * from `bootstrap` on this path instead of polling `events.since`. Declared
+ * here, structurally, rather than added to `HouseholdRepo.sync()`, so
+ * `src/data/repo.ts` and `MemoryRepo` (which has no catalog to refresh) do
+ * not change for this ticket.
+ */
+export interface ForegroundSyncable {
+  syncForeground(): ReturnType<HouseholdRepo['sync']>
+}
+
+export function isForegroundSyncable(repo: HouseholdRepo): repo is HouseholdRepo & ForegroundSyncable {
+  return typeof (repo as Partial<ForegroundSyncable>).syncForeground === 'function'
+}
+
 export interface SessionOptions {
   storage: SessionStorage
   /** Builds a `SheetsRepo` (or a test double) for the given setup link. */
