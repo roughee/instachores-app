@@ -6,10 +6,19 @@
  * keeps the snapshot fresh while the page is open.
  *
  * `sync()` flushes the outbox (one `events.append` batch, then per-entry
- * upserts), then polls `events.since` with the stored cursor, merges the
- * result into the snapshot, and notifies watchers. `locked` and network
- * failures are retried (the outbox entry stays); `conflict` and `invalid`
- * are final (the entry is dropped and the error is surfaced).
+ * upserts), then either polls `events.since` with the stored cursor or
+ * re-runs `bootstrap` to refresh the whole catalog, merges the result into
+ * the snapshot, and notifies watchers. A sync is one or the other, never
+ * both. `locked` and network failures are retried (the outbox entry stays);
+ * `conflict` and `invalid` are final (the entry is dropped and the error is
+ * surfaced).
+ *
+ * The catalog refresh (issue #52) runs every 10th `sync()` call, on any sync
+ * the poller did not schedule itself (`syncForeground()`, which backs
+ * `syncNow()` and the visibility/online handlers), and on the first sync
+ * after `init()` finds no household in the snapshot, so a phone that
+ * connected before the sheet was seeded, or a resumed session whose
+ * snapshot never got a household, catches up on its own.
  */
 import { ChoreEvent, Household, Reward, Task } from '@/schemas'
 import type {
@@ -58,6 +67,8 @@ const BACKOFF_INTERVAL_MS = 120_000
 const FAILURES_BEFORE_BACKOFF = 3
 /** How far back `connect()` bootstraps before the household's timezone is known (Architecture §6). */
 const CONNECT_LOOKBACK_MS = 35 * 24 * 60 * 60 * 1000
+/** Cadence of the catalog refresh below: every 10th `sync()` call (issue #52). */
+const CATALOG_REFRESH_EVERY = 10
 
 const defaultLog: RepoLog = (message, detail) => console.warn(message, detail)
 
@@ -74,6 +85,16 @@ interface EventWatcher {
   cb: (e: ChoreEventT[]) => void
 }
 
+/**
+ * Whether a `sync()` call is the poller's own timer tick or something it did
+ * not schedule itself (issue #52): `syncForeground()` -- which backs the
+ * sync store's `syncNow()` -- a tab becoming visible again, or the browser
+ * coming back online. Only `'foreground'` forces a catalog refresh on its
+ * own; a `'timer'` sync still refreshes on the 10th call or the first sync
+ * with no household.
+ */
+type SyncTrigger = 'timer' | 'foreground'
+
 interface BootstrapResponse {
   household: unknown
   members: unknown[]
@@ -81,6 +102,16 @@ interface BootstrapResponse {
   rewards: unknown[]
   events: unknown[]
   serverTime: string
+}
+
+type Parsed<T> = { items: T[]; skipped: number; lastSkipped?: SkippedRow }
+
+/** A `bootstrap` answer after every boundary parse (issue #52): shared by `connect()` and `refreshCatalog()`. */
+interface ParsedBootstrap {
+  household: HouseholdT
+  tasks: Parsed<TaskT>
+  rewards: Parsed<RewardT>
+  events: Parsed<ChoreEventT>
 }
 
 interface EventsSinceResponse {
@@ -178,6 +209,9 @@ export class SheetsRepo implements HouseholdRepo {
   private timer: ReturnType<typeof setTimeout> | undefined
   private running = false
   private consecutiveFailures = 0
+
+  /** Count of `sync()` calls so far, for the every-10th catalog refresh (issue #52). */
+  private syncCount = 0
 
   constructor(options: SheetsRepoOptions) {
     this.link = options.link
@@ -361,35 +395,49 @@ export class SheetsRepo implements HouseholdRepo {
       since: since.toISOString(),
     })
 
-    const household = Household.parse({ ...(res.household as object), members: buildMembersRecord(res.members) })
-    const tasks = parseRows(Task, res.tasks, 'tasks', this.log)
-    const rewards = parseRows(Reward, res.rewards, 'rewards', this.log)
-    const events = parseRows(ChoreEvent, res.events, 'events', this.log)
-
-    const cursor = nextCursor(undefined, events.items)
+    const parsed = this.parseBootstrap(res)
+    const cursor = nextCursor(undefined, parsed.events.items)
     this.link = link
     this.state = {
-      household,
-      tasks: tasks.items,
-      rewards: rewards.items,
-      events: events.items,
+      household: parsed.household,
+      tasks: parsed.tasks.items,
+      rewards: parsed.rewards.items,
+      events: parsed.events.items,
       ...(cursor !== undefined && { cursor }),
     }
     this.initPromise = Promise.resolve()
-    // Events are parsed after tasks and rewards, so a bad row there is the "latest" for lastSkipped.
+    this.status = { ...this.status, ...this.skippedAfter(parsed) }
+    await this.persist()
+    this.notifyAll()
+    return parsed.household
+  }
+
+  /** Parses a `bootstrap` answer the same way for `connect()` and `refreshCatalog()`: the household throws on a bad row, the tables skip them. */
+  private parseBootstrap(res: BootstrapResponse): ParsedBootstrap {
+    return {
+      household: Household.parse({ ...(res.household as object), members: buildMembersRecord(res.members) }),
+      tasks: parseRows(Task, res.tasks, 'tasks', this.log),
+      rewards: parseRows(Reward, res.rewards, 'rewards', this.log),
+      events: parseRows(ChoreEvent, res.events, 'events', this.log),
+    }
+  }
+
+  /** Skipped-row bookkeeping for a parsed bootstrap. Events are parsed last, so a bad row there is the "latest" for lastSkipped. */
+  private skippedAfter(parsed: ParsedBootstrap): { skippedRows: number; lastSkipped?: SkippedRow } {
+    const { tasks, rewards, events } = parsed
     const lastSkipped = events.lastSkipped ?? rewards.lastSkipped ?? tasks.lastSkipped
-    this.status = {
-      ...this.status,
+    return {
       skippedRows: this.status.skippedRows + tasks.skipped + rewards.skipped + events.skipped,
       ...(lastSkipped !== undefined && { lastSkipped }),
     }
-    await this.persist()
+  }
+
+  private notifyAll(): void {
     this.notifyHousehold()
     this.notifyTasks()
     this.notifyRewards()
     this.notifyEvents()
     this.notifyStatus()
-    return household
   }
 
   private async flushOutbox(): Promise<{ retryable: number; dropped: number; lastError?: string }> {
@@ -485,12 +533,69 @@ export class SheetsRepo implements HouseholdRepo {
     }
   }
 
-  async sync(): Promise<SyncResult> {
+  /**
+   * Re-runs `bootstrap` and merges the result into the snapshot (issue #52):
+   * household, tasks and rewards are replaced outright, the same way
+   * `connect()` sets them; events are merged and the cursor advanced the
+   * same way `poll()` does, since `bootstrap` already returns every event
+   * since `since`. This replaces the poll for the sync it runs in.
+   *
+   * A failed refresh (network, unauthorized, or a household that fails to
+   * parse) leaves the current household, tasks and rewards untouched, sets
+   * `lastError` and `online` the same way a failed `poll()` does, and never
+   * touches the outbox: nothing here is mutated until every row has parsed.
+   */
+  private async refreshCatalog(): Promise<{ pulled: number; lastError?: string }> {
+    try {
+      const since = this.state.cursor
+        ? this.state.cursor.toISOString()
+        : new Date(this.now().getTime() - CONNECT_LOOKBACK_MS).toISOString()
+      const res = await postAction<BootstrapResponse>(this.fetchImpl, this.link.url, this.link.secret, 'bootstrap', {
+        since,
+      })
+
+      const parsed = this.parseBootstrap(res)
+      const cursor = nextCursor(this.state.cursor, parsed.events.items)
+      this.state = {
+        ...this.state,
+        household: parsed.household,
+        tasks: parsed.tasks.items,
+        rewards: parsed.rewards.items,
+        events: mergeEvents(this.state.events, parsed.events.items),
+        ...(cursor !== undefined && { cursor }),
+      }
+      await this.persist()
+      this.status = { ...this.status, online: true, lastPollAt: this.now(), ...this.skippedAfter(parsed) }
+      this.notifyAll()
+      return { pulled: parsed.events.items.length }
+    } catch (err) {
+      const message = errorMessage(err)
+      this.status = { ...this.status, online: !(err instanceof RepoError && err.code === 'network') }
+      this.log('SheetsRepo: catalog refresh failed', err)
+      return { pulled: 0, lastError: message }
+    }
+  }
+
+  /**
+   * Flushes the outbox, then either refreshes the catalog from `bootstrap`
+   * or polls `events.since` -- never both (issue #52). The refresh runs
+   * every 10th call, on any `'foreground'` trigger (`syncForeground()`,
+   * which is not scheduled by the poller's own timer), and on every call
+   * while the snapshot still has no household, so a resumed session that
+   * never got one keeps trying until a bootstrap succeeds. `trigger`
+   * defaults to `'timer'`, the poller's own cadence.
+   */
+  async sync(trigger: SyncTrigger = 'timer'): Promise<SyncResult> {
     await this.init()
     const flush = await this.flushOutbox()
-    const poll = await this.poll()
+
+    this.syncCount += 1
+    const dueForCatalogRefresh =
+      this.syncCount % CATALOG_REFRESH_EVERY === 0 || trigger === 'foreground' || this.state.household === undefined
+
+    const read = dueForCatalogRefresh ? await this.refreshCatalog() : await this.poll()
     const pending = (await this.outbox.pending()).length
-    const lastError = poll.lastError ?? flush.lastError
+    const lastError = read.lastError ?? flush.lastError
 
     this.status = { ...this.status, outboxCount: pending, lastError }
     this.notifyStatus()
@@ -500,9 +605,19 @@ export class SheetsRepo implements HouseholdRepo {
       syncedAt: this.now(),
       retryable: flush.retryable,
       dropped: flush.dropped,
-      pulled: poll.pulled,
+      pulled: read.pulled,
       ...(lastError !== undefined && { lastError }),
     }
+  }
+
+  /**
+   * `sync()` with the `'foreground'` trigger (issue #52): always refreshes
+   * the catalog. Not part of `HouseholdRepo`, so the interface and
+   * `MemoryRepo` are unaffected; `syncStore.syncNow()` calls this instead of
+   * `sync()` when the bound repo exposes it (`isForegroundSyncable`).
+   */
+  async syncForeground(): Promise<SyncResult> {
+    return this.sync('foreground')
   }
 
   // -- Poller: 30s while visible, backoff to 2min after 3 consecutive failures. --------------
@@ -514,8 +629,8 @@ export class SheetsRepo implements HouseholdRepo {
     }, this.status.intervalMs)
   }
 
-  private async tick(): Promise<void> {
-    const result = await this.sync()
+  private async tick(trigger: SyncTrigger = 'timer'): Promise<void> {
+    const result = await this.sync(trigger)
     if (result.lastError !== undefined) {
       this.consecutiveFailures += 1
       if (this.consecutiveFailures >= FAILURES_BEFORE_BACKOFF) {
@@ -532,11 +647,17 @@ export class SheetsRepo implements HouseholdRepo {
   private readonly handleVisibilityChange = (): void => this.onVisible()
   private readonly handleOnline = (): void => this.onOnline()
 
-  /** Starts the recurring poll. Visibility/online listeners attach only where `document`/`window` exist. */
+  /**
+   * Starts the recurring poll. Visibility/online listeners attach only where
+   * `document`/`window` exist. A snapshot that loaded without a household
+   * (issue #52) syncs at once instead of waiting a full interval, so a stuck
+   * phone recovers as soon as it opens.
+   */
   start(): void {
     if (this.running) return
     this.running = true
-    this.scheduleNext()
+    if (this.state.household === undefined) this.pollNow('timer')
+    else this.scheduleNext()
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.handleVisibilityChange)
     if (typeof window !== 'undefined') window.addEventListener('online', this.handleOnline)
   }
@@ -551,22 +672,22 @@ export class SheetsRepo implements HouseholdRepo {
     if (typeof window !== 'undefined') window.removeEventListener('online', this.handleOnline)
   }
 
-  private pollNow(): void {
+  private pollNow(trigger: SyncTrigger): void {
     if (this.timer !== undefined) {
       this.timers.clearTimeout(this.timer)
       this.timer = undefined
     }
-    void this.tick()
+    void this.tick(trigger)
   }
 
-  /** Called on `visibilitychange`; polls immediately when the page just became visible. */
+  /** Called on `visibilitychange`; syncs immediately (a foreground trigger, issue #52) when the page just became visible. */
   onVisible(): void {
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-    this.pollNow()
+    this.pollNow('foreground')
   }
 
-  /** Called on the `online` event; polls immediately instead of waiting for the timer. */
+  /** Called on the `online` event; syncs immediately (a foreground trigger, issue #52) instead of waiting for the timer. */
   onOnline(): void {
-    this.pollNow()
+    this.pollNow('foreground')
   }
 }

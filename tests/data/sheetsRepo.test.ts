@@ -5,7 +5,13 @@ import { RepoError } from '@/data/repo'
 import { SheetsRepo } from '@/data/sheetsRepo'
 import type { SheetsRepoStatus } from '@/data/sheetsRepo'
 import { Snapshot } from '@/data/snapshot'
-import type { ChoreEvent as ChoreEventT, Reward as RewardT, SetupLink, Task as TaskT } from '@/schemas'
+import type {
+  ChoreEvent as ChoreEventT,
+  Household as HouseholdT,
+  Reward as RewardT,
+  SetupLink,
+  Task as TaskT,
+} from '@/schemas'
 import { ANA, BEN, HID, complete, event, household, reward, task } from '../helpers/fixtures'
 
 const LINK: SetupLink = { url: 'https://script.google.com/macros/s/abc/exec', secret: 'x'.repeat(12) }
@@ -21,6 +27,20 @@ function memoryStore(): KvStore {
       map.delete(key)
     },
   }
+}
+
+/** A snapshot store already holding a household, for tests about polling that never `connect()`: without one, `sync()` would (correctly, #52) bootstrap instead of polling. */
+async function seededSnapshotStore(): Promise<KvStore> {
+  const store = memoryStore()
+  const h = household()
+  await new Snapshot(store).write({
+    household: h,
+    members: Object.values(h.members),
+    tasks: [],
+    rewards: [],
+    events: [],
+  })
+  return store
 }
 
 function jsonResponse(body: unknown): Response {
@@ -214,7 +234,7 @@ describe('SheetsRepo: outbox flush and retry', () => {
       link: LINK,
       householdId: HID,
       outbox,
-      snapshot: new Snapshot(memoryStore()),
+      snapshot: new Snapshot(await seededSnapshotStore()),
       fetch: fetchImpl,
     })
     await repo.init()
@@ -315,11 +335,14 @@ describe('SheetsRepo: polling', () => {
         return jsonResponse({ ok: true, events: [good1, bad, badWithoutId, good2], serverTime: 'x' })
       throw new Error(`unexpected action: ${body.action}`)
     })
+    // Seeded with a household already, so this poll is not also the first
+    // sync with no household (#52), which would refresh the catalog instead.
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
       outbox: new Outbox(memoryStore()),
-      snapshot: new Snapshot(memoryStore()),
+      snapshot: new Snapshot(snapshotStore),
       fetch: fetchImpl,
       log,
     })
@@ -366,11 +389,15 @@ describe('SheetsRepo: polling', () => {
       }
       throw new Error(`unexpected action: ${body.action}`)
     })
+    // Seeded with a household already, so these two polls are not also the
+    // first sync with no household (#52), which would refresh the catalog
+    // instead of polling on the first call.
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
       outbox: new Outbox(memoryStore()),
-      snapshot: new Snapshot(memoryStore()),
+      snapshot: new Snapshot(snapshotStore),
       fetch: fetchImpl,
     })
     await repo.init()
@@ -390,11 +417,14 @@ describe('SheetsRepo: polling', () => {
       if (body.action === 'events.since') return jsonResponse({ ok: true, events: [good, bad], serverTime: 'x' })
       throw new Error(`unexpected action: ${body.action}`)
     })
+    // Seeded with a household already, so this poll is not also the first
+    // sync with no household (#52), which would refresh the catalog instead.
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
       outbox: new Outbox(memoryStore()),
-      snapshot: new Snapshot(memoryStore()),
+      snapshot: new Snapshot(snapshotStore),
       fetch: fetchImpl,
     })
     await repo.init()
@@ -405,6 +435,311 @@ describe('SheetsRepo: polling', () => {
 
     expect(status?.skippedRows).toBe(1)
     expect(status?.lastSkipped).toEqual({ tab: 'events', id: 'ev-bad-1' })
+  })
+})
+
+describe('sync', () => {
+  const CATALOG_HOUSEHOLD = {
+    v: '1',
+    id: HID,
+    name: 'Home',
+    weeklyTarget: '250',
+    tz: 'Europe/Vilnius',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  }
+  const CATALOG_MEMBERS = [{ uid: ANA, name: 'Ana', color: '#1f8a70', role: 'adult' }]
+
+  function bootstrapBody(
+    overrides: {
+      household?: unknown
+      tasks?: unknown[]
+      rewards?: unknown[]
+      events?: unknown[]
+    } = {},
+  ): unknown {
+    return {
+      ok: true,
+      household: CATALOG_HOUSEHOLD,
+      members: CATALOG_MEMBERS,
+      tasks: [],
+      rewards: [],
+      events: [],
+      serverTime: 'x',
+      ...overrides,
+    }
+  }
+
+  function newRepo(fetchImpl: typeof fetch): SheetsRepo {
+    return new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+  }
+
+  it('refreshes tasks, rewards and household from bootstrap on the 10th sync', async () => {
+    const actions: string[] = []
+    const refreshedTask = task({ id: 'task-refreshed', name: 'Refreshed task' })
+    const refreshedReward = reward({ id: 'reward-refreshed', name: 'Refreshed reward' })
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap')
+        return jsonResponse(
+          bootstrapBody({
+            household: { ...CATALOG_HOUSEHOLD, name: 'Home Renamed' },
+            tasks: [refreshedTask],
+            rewards: [refreshedReward],
+          }),
+        )
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.connect(LINK)
+    actions.length = 0 // Drop connect()'s own bootstrap call; only sync() calls count towards the cadence.
+
+    for (let i = 0; i < 9; i++) await repo.sync()
+    expect(actions).toEqual(Array(9).fill('events.since'))
+
+    await repo.sync()
+    expect(actions.at(-1)).toBe('bootstrap')
+
+    let seenHousehold: HouseholdT | undefined
+    repo.watchHousehold(HID, (h) => (seenHousehold = h))
+    expect(seenHousehold?.name).toBe('Home Renamed')
+
+    let seenTasks: TaskT[] = []
+    repo.watchTasks(HID, (t) => (seenTasks = t))
+    expect(seenTasks).toEqual([refreshedTask])
+
+    let seenRewards: RewardT[] = []
+    repo.watchRewards(HID, (r) => (seenRewards = r))
+    expect(seenRewards).toEqual([refreshedReward])
+  })
+
+  it('polls events.since, not bootstrap, on the syncs in between', async () => {
+    const actions: string[] = []
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap') return jsonResponse(bootstrapBody())
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.connect(LINK)
+    actions.length = 0 // Drop connect()'s own bootstrap call.
+
+    for (let i = 0; i < 9; i++) await repo.sync()
+    expect(actions).toEqual(Array(9).fill('events.since'))
+  })
+
+  it('refreshes the catalog on a foreground or user-triggered sync', async () => {
+    const actions: string[] = []
+    const foregroundTask = task({ id: 'task-foreground', name: 'Foreground task' })
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap') return jsonResponse(bootstrapBody({ tasks: [foregroundTask] }))
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.connect(LINK)
+    actions.length = 0 // Drop connect()'s own bootstrap call.
+
+    // `onOnline()` is one of the three triggers the poller does not schedule
+    // itself (the others are `syncNow()` and `onVisible()`); it must refresh
+    // the catalog rather than poll, even though it is not the 10th sync.
+    repo.onOnline()
+    await settle()
+
+    expect(actions).toEqual(['bootstrap'])
+    let seenTasks: TaskT[] = []
+    repo.watchTasks(HID, (t) => (seenTasks = t))
+    expect(seenTasks).toEqual([foregroundTask])
+  })
+
+  it('refreshes on the first sync when the snapshot has no household', async () => {
+    const actions: string[] = []
+    const recoveredHousehold = { ...CATALOG_HOUSEHOLD, name: 'Recovered home' }
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap') return jsonResponse(bootstrapBody({ household: recoveredHousehold }))
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    // No connect(): the snapshot is empty, as if a resumed session's stored
+    // snapshot never got a household (#52).
+    const repo = newRepo(fetchImpl)
+    await repo.init()
+
+    await repo.sync()
+
+    expect(actions).toEqual(['bootstrap'])
+    let seenHousehold: HouseholdT | undefined
+    repo.watchHousehold(HID, (h) => (seenHousehold = h))
+    expect(seenHousehold?.name).toBe('Recovered home')
+  })
+
+  it('keeps the current catalog and reports lastError when the refresh fails', async () => {
+    let bootstrapCalls = 0
+    const currentTask = task({ id: 'task-current' })
+    const currentReward = reward({ id: 'reward-current' })
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      if (body.action === 'bootstrap') {
+        bootstrapCalls++
+        if (bootstrapCalls === 1) return jsonResponse(bootstrapBody({ tasks: [currentTask], rewards: [currentReward] }))
+        throw new TypeError('network down')
+      }
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.connect(LINK)
+
+    let seenHousehold: HouseholdT | undefined
+    repo.watchHousehold(HID, (h) => (seenHousehold = h))
+    let seenTasks: TaskT[] = []
+    repo.watchTasks(HID, (t) => (seenTasks = t))
+    let seenRewards: RewardT[] = []
+    repo.watchRewards(HID, (r) => (seenRewards = r))
+
+    const result = await repo.syncForeground()
+
+    expect(result.lastError).toBeDefined()
+    expect(seenHousehold?.name).toBe(CATALOG_HOUSEHOLD.name)
+    expect(seenTasks).toEqual([currentTask])
+    expect(seenRewards).toEqual([currentReward])
+  })
+
+  it('keeps refreshing on every timer sync while the household is still missing, until one succeeds', async () => {
+    // A resumed session with no household whose first bootstrap fails must
+    // not fall back to nine event polls (#52 review): it retries the refresh
+    // on the next tick, and stops once a household has arrived.
+    const actions: string[] = []
+    let bootstrapCalls = 0
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap') {
+        bootstrapCalls++
+        if (bootstrapCalls === 1) return jsonResponse({ ok: false, code: 'unauthorized' })
+        return jsonResponse(bootstrapBody())
+      }
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.init()
+
+    await repo.sync()
+    await repo.sync()
+    await repo.sync()
+
+    expect(actions).toEqual(['bootstrap', 'bootstrap', 'events.since'])
+  })
+
+  it('start() syncs at once when the snapshot has no household, instead of waiting a full interval', async () => {
+    vi.useFakeTimers()
+    try {
+      const actions: string[] = []
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = parsedBody(init)
+        actions.push(body.action)
+        if (body.action === 'bootstrap') return jsonResponse(bootstrapBody())
+        if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+        throw new Error(`unexpected action: ${body.action}`)
+      })
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+      })
+      await repo.init()
+      repo.start()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(actions).toEqual(['bootstrap'])
+      let seenHousehold: HouseholdT | undefined
+      repo.watchHousehold(HID, (h) => (seenHousehold = h))
+      expect(seenHousehold?.name).toBe(CATALOG_HOUSEHOLD.name)
+
+      // The recovered household means the next tick is an ordinary poll, on the normal cadence.
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(actions).toEqual(['bootstrap', 'events.since'])
+      repo.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('start() with a household in the snapshot waits for the interval as before', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = parsedBody(init)
+        if (body.action === 'bootstrap') return jsonResponse(bootstrapBody())
+        if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+        throw new Error(`unexpected action: ${body.action}`)
+      })
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+      })
+      await repo.connect(LINK)
+      fetchImpl.mockClear()
+      repo.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchImpl).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      repo.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a refresh never touches the outbox', async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      if (body.action === 'bootstrap')
+        return jsonResponse(bootstrapBody({ tasks: [task({ id: 'task-after-refresh' })] }))
+      if (body.action === 'events.append') return jsonResponse({ ok: false, code: 'locked' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const outbox = new Outbox(memoryStore())
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox,
+      snapshot: new Snapshot(memoryStore()),
+      fetch: fetchImpl,
+    })
+    await repo.connect(LINK)
+
+    const queued = complete(task())
+    await outbox.enqueue('events.append', queued)
+
+    const result = await repo.syncForeground()
+
+    expect(result.retryable).toBe(1)
+    expect((await outbox.pending()).map((e) => e.payload.id)).toEqual([queued.id])
+
+    let seenTasks: TaskT[] = []
+    repo.watchTasks(HID, (t) => (seenTasks = t))
+    expect(seenTasks.map((t) => t.id)).toEqual(['task-after-refresh'])
   })
 })
 
@@ -421,7 +756,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
@@ -455,7 +790,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
         pollIntervalMs: 1_000,
@@ -485,7 +820,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
@@ -531,7 +866,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
