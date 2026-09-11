@@ -194,7 +194,7 @@ A PR that touches `apps-script/` or `src/schemas/` needs both partners' approval
 | `domain/` | Vitest, table-driven, 100% line coverage | points math, combos, streaks, week and month boundaries across DST, stars separate from points |
 | `schemas/` | Vitest | accept and reject cases, round trips, `v0` to `v1` migrations, sheet booleans and empty cells coerce correctly |
 | `data/` | Vitest with a fake `fetch` | parse before send, bad rows skipped, outbox replays after reconnect without duplicates, cursor advances, backoff after failures |
-| `apps-script/` | `test_` function in the script editor against a scratch sheet, manual before each deploy | secret rejected, duplicate id skipped, lock released on error, conflict on stale `updatedAt` |
+| `apps-script/` | `runTests` function in the script editor against a scratch sheet, manual before each deploy | secret rejected, duplicate id skipped, lock released on error, conflict on stale `updatedAt` |
 | `stores/` | Vitest with `MemoryRepo` | actions append the right events, optimistic apply, undo window |
 | components | Vitest + `@vue/test-utils` | `TaskGroup` emits sub-item ids, toast Undo wiring, `RewardCard` disabled reason |
 | end-to-end | Playwright on the built PWA with a mocked script endpoint | two-tap log, offline log then reconnect, connect by setup link, claim and ack across two browser contexts, light and dark screenshots |

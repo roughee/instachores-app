@@ -30,6 +30,8 @@ export interface HomeCrewNamespace {
   makeCtx: (ss: unknown, LockServiceRef: unknown, PropertiesServiceRef: unknown) => unknown
   handleRequest: (ctx: unknown, req: unknown) => { setMimeType(mime: string): unknown; getContent(): string }
   setupTemplate_: (ss: unknown) => unknown
+  setupTemplate: () => unknown
+  runTests: () => void
 }
 
 export function loadHomeCrew(gas: {

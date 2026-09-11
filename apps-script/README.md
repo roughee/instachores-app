@@ -8,7 +8,8 @@ bound Apps Script web app: one `doPost`, one deployment, one URL. See
 ## Files
 
 - `Code.js`: the router, the sheet I/O, the lock, the secret check, the
-  `setupTemplate_()` and `test_()` helpers. Plain Apps Script JavaScript, V8
+  `setupTemplate_()` and `test_()` helpers with their public `setupTemplate()`
+  and `runTests()` wrappers for the editor's Run picker. Plain Apps Script JavaScript, V8
   runtime, no modules.
 - `appsscript.json`: manifest (`timeZone: Europe/Vilnius`, `runtimeVersion:
 V8`, web app `executeAs: USER_DEPLOYING`, `access: ANYONE`).
@@ -53,7 +54,7 @@ by hand later.
 1. Create a new Google Sheet.
 2. Attach this Apps Script project to it (`clasp clone <scriptId>` if the
    script already exists, or create a new bound script and push this code).
-3. In the Apps Script editor, select `setupTemplate_` in the function
+3. In the Apps Script editor, select `setupTemplate` in the function
    picker and click Run. It creates the five tabs with header rows and
    plain-text formatting on an empty spreadsheet. It is safe to re-run: it
    only creates a tab if one by that name does not already exist, and only
@@ -100,7 +101,7 @@ Two partners approving `apps-script/` changes, and an ADR for anything not
 backward compatible, is the rule from `docs/Architecture.md` §10 — the
 script is a second deployable with its own, rarer cadence than the PWA.
 
-## Before you deploy: run `test_`
+## Before you deploy: run `runTests`
 
 `test_()` creates a scratch spreadsheet (`SpreadsheetApp.create`), builds
 the template and a couple of members on it, runs every scenario below
@@ -109,7 +110,7 @@ real web app uses, logs `PASS`/`FAIL` per scenario to the Apps Script
 execution log, and trashes the scratch spreadsheet in a `finally` block
 whether or not everything passed.
 
-To run it: open the Apps Script editor, select `test_` in the function
+To run it: open the Apps Script editor, select `runTests` in the function
 picker, click Run, then check View -> Logs (or the execution transcript)
 for `PASS`/`FAIL` lines and a final `ALL PASS (n)` or `n FAILED of n`.
 
@@ -152,7 +153,7 @@ back out afterwards (and immediately deletes off `globalThis`).
 
 This was chosen over the alternative (wrapping the whole file as the _body_
 of one `new Function(...)` call and returning an object from it) because
-Apps Script itself needs `doPost`, `setupTemplate_` and `test_` to be
+Apps Script itself needs `doPost`, `setupTemplate` and `runTests` to be
 ordinary top-level function declarations — that is how the editor's "run
 function" picker and the web app trigger find them. Structuring the file
 around a `return {...}` would mean either duplicating the file for the two

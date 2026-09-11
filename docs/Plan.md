@@ -734,7 +734,7 @@ The full test discipline (red first, regression tests for bugs, per-layer covera
 
 - **Domain** (most of the tests): table-driven Vitest cases — "two pots + pans + counters + trash + dishwasher on same day → bonus emitted once", "undo removes points", "week rollup respects Monday boundary across DST", "kid tasks don't touch adult balance".
 - **Schemas**: round-trip tests (`parse(serialize(x)) deep-equals x`), rejection tests (points 51, missing `v`), migration tests (`v0` fixture → `v1`).
-- **Repo**: `MemoryRepo` in tests; `SheetsRepo` against a fake `fetch` (Vitest) for parse-before-send, skip-bad-rows, outbox replay and dedupe. The Apps Script has a `test_` function run from the script editor against a scratch sheet before each deploy (manual, documented in `apps-script/README.md`).
+- **Repo**: `MemoryRepo` in tests; `SheetsRepo` against a fake `fetch` (Vitest) for parse-before-send, skip-bad-rows, outbox replay and dedupe. The Apps Script has a `runTests` function run from the script editor against a scratch sheet before each deploy (manual, documented in `apps-script/README.md`).
 - **Components**: a handful — `TaskGroup.vue` sub-item taps emit the right task ids; `Toast.vue` undo calls the store.
 - **CI** (`deploy.yml`): `npm ci` → `vue-tsc --noEmit` → `eslint` → `vitest run` → `vite build` → publish `dist/` to `gh-pages`. A red test blocks deploy.
 
@@ -888,7 +888,7 @@ What each layer proves:
 |---|---|---|---|
 | `domain/` | Vitest, table-driven | balances, rollups, combos, streaks, week/month boundaries, due logic, star vs point separation | any change in points math, double-counted bonus, off-by-one on Monday |
 | `schemas/` | Vitest | accept/reject cases, round-trip serialize/parse, `v0 → v1` migration fixtures | a field renamed without a migration, points > 50 sneaking in |
-| `data/` | Vitest with a fake `fetch`; Apps Script `test_` function run against a scratch sheet before each deploy (manual) | repo writes parse before send, reads skip bad rows without throwing, outbox replays after reconnect and never duplicates, script rejects a wrong secret and a duplicate event id | a row that breaks the poll, an outbox replay that double-logs, a script change that opens the sheet |
+| `data/` | Vitest with a fake `fetch`; Apps Script `runTests` function run against a scratch sheet before each deploy (manual) | repo writes parse before send, reads skip bad rows without throwing, outbox replays after reconnect and never duplicates, script rejects a wrong secret and a duplicate event id | a row that breaks the poll, an outbox replay that double-logs, a script change that opens the sheet |
 | `stores/` | Vitest with `MemoryRepo` | actions append correct events, getters reflect derived state, undo window | undo appending the wrong ref, quick row learning from the wrong window |
 | components | Vitest + `@vue/test-utils` | `TaskGroup` emits sub-item ids, ×2 badge, toast Undo wiring, `RewardCard` disabled reason | UI that emits the wrong task, claim button enabled with short balance |
 | end-to-end | Playwright on the built PWA (one spec per page in §5.5) | two-tap log, offline log then reconnect, connect by setup link, claim/ack across two browser contexts, light/dark screenshots | broken service worker, hash route 404, theme regression |

@@ -724,3 +724,32 @@ describe('sheet row bookkeeping', () => {
     expect(ss.getSheetByName('tasks')!.formats).toContainEqual(expect.objectContaining({ row: 2, format: '@' }))
   })
 })
+
+describe('public entry points', () => {
+  it("exposes setupTemplate and runTests for the editor's Run picker", () => {
+    // Apps Script hides any function whose name ends in `_` from the Run
+    // picker, so the documented `setupTemplate_` / `test_` could never be
+    // selected (issue #49). The public wrappers must exist and be plain
+    // functions whose names carry no trailing underscore.
+    const { HomeCrew } = makeWorld()
+    expect(typeof HomeCrew.setupTemplate).toBe('function')
+    expect(typeof HomeCrew.runTests).toBe('function')
+    expect(HomeCrew.setupTemplate.name.endsWith('_')).toBe(false)
+    expect(HomeCrew.runTests.name.endsWith('_')).toBe(false)
+  })
+
+  it('setupTemplate builds the five tabs on the active spreadsheet', () => {
+    const ss = new FakeSpreadsheet()
+    const { LockService } = createFakeLockService()
+    const { PropertiesService } = createFakePropertiesService({ SECRET })
+    const { ContentService } = createFakeContentService()
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
+    const { DriveApp } = createFakeDriveApp()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, DriveApp })
+
+    HomeCrew.setupTemplate()
+
+    expect(ss.getSheets().map((sh) => sh.getName())).toEqual(['household', 'members', 'tasks', 'rewards', 'events'])
+    expect(ss.getSheetByName('events')!.snapshot()[0]).toEqual(EVENTS_HEADERS)
+  })
+})
