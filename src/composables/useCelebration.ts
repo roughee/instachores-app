@@ -85,8 +85,9 @@ export function useCelebration(): CelebrationState {
   return shared
 }
 
-/** Issue #53's one-shot removal timer, ~900ms after a trigger. */
-const CELEBRATION_DURATION_MS = 900
+/** Issue #53's one-shot removal timer after a trigger; 2700ms since issue #59, three times the original.
+ * Must match `--dur-celebration` in tokens.css and the defused delay in scripts/screenshots.mjs. */
+export const CELEBRATION_DURATION_MS = 2700
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
@@ -100,7 +101,7 @@ function prefersReducedMotion(): boolean {
  * `celebration` ref and, for each new value: under
  * `prefers-reduced-motion: reduce`, clears it right away so the moment is
  * skipped entirely rather than fading (see `Celebration.vue`'s header
- * comment for why); otherwise starts the ~900ms removal timer.
+ * comment for why); otherwise starts the removal timer (`CELEBRATION_DURATION_MS`).
  */
 export function useCelebrationOverlay(): {
   celebration: Ref<CelebrationView | undefined>

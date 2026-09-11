@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { CELEBRATION_IDS, createCelebrationState, pickCelebration, useCelebration } from '@/composables/useCelebration'
+import {
+  CELEBRATION_DURATION_MS,
+  CELEBRATION_IDS,
+  createCelebrationState,
+  pickCelebration,
+  useCelebration,
+} from '@/composables/useCelebration'
 
 describe('pickCelebration', () => {
   it('returns one of the ten ids', () => {
@@ -58,5 +64,11 @@ describe('useCelebration', () => {
 
   it('useCelebration() always returns the same shared instance, so App.vue and any screen see one state', () => {
     expect(useCelebration()).toBe(useCelebration())
+  })
+})
+
+describe('CELEBRATION_DURATION_MS', () => {
+  it('is 2700ms, three times the original moment (issue #59), and must match --dur-celebration', () => {
+    expect(CELEBRATION_DURATION_MS).toBe(2700)
   })
 })
