@@ -21,7 +21,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import TaskButton from '@/components/TaskButton.vue'
 import TaskGroup from '@/components/TaskGroup.vue'
 import Toast from '@/components/Toast.vue'
-import { categoryIcon, categoryLabel } from '@/components/categoryIcons'
+import { categoryColor, categoryIcon, categoryLabel } from '@/components/categoryIcons'
+import { useCelebration } from '@/composables/useCelebration'
 import { flagValue, hasFlag } from '@/composables/usePwa'
 import { useHaptic } from '@/composables/useHaptic'
 import { useToast } from '@/composables/useToast'
@@ -37,6 +38,7 @@ const eventsStore = useEventsStore()
 const householdStore = useHouseholdStore()
 const { tick } = useHaptic()
 const { toast, show, dismiss } = useToast()
+const { trigger: triggerCelebration } = useCelebration()
 
 const category = computed(() => {
   const raw = route.params.category
@@ -85,10 +87,17 @@ function showLoggedToast(message: string): void {
   })
 }
 
+/** Every task on this screen shares the route's category, so this is
+ * cheaper than resolving each tapped task's own `category` field. */
+function celebrationColor(): string {
+  return categoryColor(category.value.success ? category.value.data : undefined)
+}
+
 async function onComplete(taskId: string): Promise<void> {
   const task = catalogStore.byId.get(taskId)
   tick()
   const pending = eventsStore.complete(taskId)
+  triggerCelebration(celebrationColor())
   showLoggedToast(task ? `${task.name} logged` : 'Task logged')
   await pending
 }
@@ -96,6 +105,7 @@ async function onComplete(taskId: string): Promise<void> {
 async function onCompleteAll(taskIds: string[], groupName: string): Promise<void> {
   tick()
   const pending = eventsStore.completeMany(taskIds)
+  triggerCelebration(celebrationColor())
   showLoggedToast(`${groupName} logged`)
   await pending
 }

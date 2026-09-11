@@ -226,3 +226,41 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 21-settings-${scheme}.png`)
 }
+
+// Issue #53: the celebration overlay, two of the ten moments, frozen at a
+// fixed frame. `?forceCelebration=<id>` (App.vue) sets the exact moment
+// instead of the random pick, at the instant the app boots. Two clocks
+// would otherwise race a real page load: the JS removal timer (defused
+// below, same as the other issues' `forceX` flags) and the CSS animation's
+// own clock, which runs from mount regardless of any JS. So the freeze does
+// not wait and hope: the Web Animations API pauses every icon's animation
+// and sets its current time to 450ms of the 900ms moment, whatever the wall
+// clock says. Every moment ends with a fade, so a late capture would
+// otherwise be blank.
+for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    const browser = await chromium.launch({ executablePath })
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+    await page.addInitScript(() => {
+      const realSetTimeout = window.setTimeout
+      // @ts-expect-error -- screenshot-only override, not shipped code
+      window.setTimeout = (fn, delay, ...args) => {
+        if (delay === 900) return 0
+        return realSetTimeout(fn, delay, ...args)
+      }
+    })
+    await page.goto(`${BASE_URL}?demo=1&forceCelebration=${id}#/log`, { waitUntil: 'networkidle' })
+    await page.locator('[data-test="celebration"]').waitFor()
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll('.celebration__icon')) {
+        for (const animation of el.getAnimations()) {
+          animation.pause()
+          animation.currentTime = 450
+        }
+      }
+    })
+    await page.screenshot({ path: `${OUT_DIR}53-celebration-${id}-${scheme}.png` })
+    await browser.close()
+    console.log(`saved 53-celebration-${id}-${scheme}.png`)
+  }
+}

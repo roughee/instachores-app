@@ -67,12 +67,13 @@ export default tseslint.config(
     },
   },
   {
-    // DESIGN.md §5 names it `Toast`; the vue-multi-word convention exists so
-    // a component tag never collides with a native HTML element, and there
-    // is no `<toast>` element to collide with.
-    files: ['src/components/Toast.vue'],
+    // `Toast` and `Celebration` (issue #53) are single-word on purpose: the
+    // vue-multi-word convention exists so a component tag never collides
+    // with a native HTML element, and there is no `<toast>` or
+    // `<celebration>` element to collide with.
+    files: ['src/components/Toast.vue', 'src/components/Celebration.vue'],
     rules: {
-      'vue/multi-word-component-names': ['error', { ignores: ['Toast'] }],
+      'vue/multi-word-component-names': ['error', { ignores: ['Toast', 'Celebration'] }],
     },
   },
   {
@@ -135,6 +136,11 @@ export default tseslint.config(
         document: 'readonly',
         fetch: 'readonly',
         location: 'readonly',
+        // Issue #53: scripts/screenshots.mjs's celebration block passes a
+        // callback into `page.addInitScript`, which runs inside the
+        // browser page, not Node, same as the `page.evaluate` callbacks
+        // above.
+        window: 'readonly',
       },
     },
   },

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { routes } from '@/router'
@@ -14,6 +14,14 @@ import { useSyncStore } from '@/stores/sync'
 import LogScreen from '@/screens/LogScreen.vue'
 import { ANA, HID, NOW, TZ, household, task } from '../helpers/fixtures'
 import { idCounter } from '../helpers/testRepo'
+
+// Issue #53: LogScreen triggers a celebration right next to its toast, on
+// the shared composable singleton -- mocked here so the assertion below is
+// about the call, not about which of the ten moments happened to render.
+const triggerSpy = vi.fn()
+vi.mock('@/composables/useCelebration', () => ({
+  useCelebration: () => ({ celebration: { value: undefined }, trigger: triggerSpy, clear: vi.fn() }),
+}))
 
 function unused(): never {
   throw new Error('not used in this test file')
@@ -42,6 +50,7 @@ let clock = NOW
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  triggerSpy.mockClear()
   clock = NOW
   configureSession({
     storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
@@ -93,6 +102,8 @@ describe('LogScreen', () => {
     const status = wrapper.get('[role="status"]')
     expect(status.text()).toContain('Pots logged')
     expect(status.text()).toContain('Undo')
+    expect(triggerSpy).toHaveBeenCalledTimes(1)
+    expect(triggerSpy).toHaveBeenCalledWith('var(--cat-kitchen)')
 
     await status.get('button').trigger('click')
 
