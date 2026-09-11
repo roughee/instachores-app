@@ -226,3 +226,38 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 21-settings-${scheme}.png`)
 }
+
+// Issue #53: the celebration overlay, two of the ten moments, frozen
+// mid-animation. `?forceCelebration=<id>` (App.vue) sets the exact moment
+// instead of the random pick, at the same instant the app boots -- which
+// races two clocks against a real page load's own time (a few hundred ms
+// of parsing, fonts and the service worker registering): the JS removal
+// timer (defused below, same as the other issues' `forceX` flags) and the
+// CSS animation's own clock, which the browser starts ticking the moment
+// the element mounts and keeps running through page load regardless of
+// any JS override. `waitUntil: 'domcontentloaded'` (not `networkidle`,
+// used elsewhere in this file) hands control back as early as possible so
+// the ~200ms wait below reliably lands inside the animation's visible
+// window instead of past it, then `animation-play-state: paused` freezes
+// that frame for the actual screenshot.
+for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    const browser = await chromium.launch({ executablePath })
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+    await page.addInitScript(() => {
+      const realSetTimeout = window.setTimeout
+      // @ts-expect-error -- screenshot-only override, not shipped code
+      window.setTimeout = (fn, delay, ...args) => {
+        if (delay === 900) return 0
+        return realSetTimeout(fn, delay, ...args)
+      }
+    })
+    await page.goto(`${BASE_URL}?demo=1&forceCelebration=${id}#/log`, { waitUntil: 'domcontentloaded' })
+    await page.locator('[data-test="celebration"]').waitFor()
+    await page.waitForTimeout(200)
+    await page.addStyleTag({ content: '.celebration__icon { animation-play-state: paused !important; }' })
+    await page.screenshot({ path: `${OUT_DIR}53-celebration-${id}-${scheme}.png` })
+    await browser.close()
+    console.log(`saved 53-celebration-${id}-${scheme}.png`)
+  }
+}

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { routes } from '@/router'
@@ -13,6 +13,14 @@ import { useSyncStore } from '@/stores/sync'
 import CategoryScreen from '@/screens/CategoryScreen.vue'
 import { ANA, BEN, HID, NOW, TZ, household, task } from '../helpers/fixtures'
 import { idCounter } from '../helpers/testRepo'
+
+// Issue #53: CategoryScreen triggers a celebration right next to its toast,
+// on the shared composable singleton -- mocked here so the assertion below
+// is about the call, not about which of the ten moments happened to render.
+const triggerSpy = vi.fn()
+vi.mock('@/composables/useCelebration', () => ({
+  useCelebration: () => ({ celebration: { value: undefined }, trigger: triggerSpy, clear: vi.fn() }),
+}))
 
 function unused(): never {
   throw new Error('not used in this test file')
@@ -41,6 +49,7 @@ let clock = NOW
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  triggerSpy.mockClear()
   clock = NOW
   configureSession({
     storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
@@ -100,6 +109,8 @@ describe('CategoryScreen', () => {
     const completes = eventsStore.events.filter((e) => e.type === 'complete')
     expect(completes).toHaveLength(1)
     expect(completes[0]?.taskId).toBe('task-pots')
+    expect(triggerSpy).toHaveBeenCalledTimes(1)
+    expect(triggerSpy).toHaveBeenCalledWith('var(--cat-kitchen)')
   })
 
   it('tapping the same chip twice shows a x2 badge, and Undo removes the last event', async () => {
@@ -134,6 +145,8 @@ describe('CategoryScreen', () => {
 
     expect(eventsStore.events.filter((e) => e.type === 'complete')).toHaveLength(3)
     expect(eventsStore.events.filter((e) => e.type === 'bonus')).toHaveLength(1)
+    expect(triggerSpy).toHaveBeenCalledTimes(1)
+    expect(triggerSpy).toHaveBeenCalledWith('var(--cat-bathroom)')
 
     await wrapper.get('[data-test="task-group-do-all"]').trigger('click')
 

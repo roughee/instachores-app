@@ -11,6 +11,7 @@ vi.mock('virtual:pwa-register/vue', () => ({
 }))
 
 import App from '@/App.vue'
+import { useCelebration } from '@/composables/useCelebration'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
 
@@ -32,6 +33,8 @@ async function mountApp() {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  window.history.replaceState({}, '', '/')
+  useCelebration().clear()
 })
 
 /**
@@ -79,5 +82,34 @@ describe('App status strip', () => {
 
     expect(wrapper.text()).toContain('Demo')
     expect(wrapper.text()).not.toContain('Offline')
+  })
+})
+
+/**
+ * `?forceCelebration=<id>` (issue #53, same pattern as `forceUpdateToast`):
+ * lets `scripts/screenshots.mjs` capture a specific one of the ten moments
+ * instead of whichever one the random pick lands on.
+ */
+describe('App forceCelebration flag', () => {
+  it('a forceCelebration query flag sets that exact moment, for deterministic screenshots', async () => {
+    window.history.replaceState({}, '', '/?forceCelebration=star-catch')
+
+    await mountApp()
+
+    expect(useCelebration().celebration.value?.id).toBe('star-catch')
+  })
+
+  it('an unknown forceCelebration value is ignored', async () => {
+    window.history.replaceState({}, '', '/?forceCelebration=not-a-real-id')
+
+    await mountApp()
+
+    expect(useCelebration().celebration.value).toBeUndefined()
+  })
+
+  it('with no flag, nothing is celebrating on load', async () => {
+    await mountApp()
+
+    expect(useCelebration().celebration.value).toBeUndefined()
   })
 })

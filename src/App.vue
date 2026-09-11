@@ -5,14 +5,34 @@
  * 48px touch-target floor. Icons are decorative next to their visible
  * text label (tabs) or a labelled button (FAB), so the accessible name
  * comes from one place, not two competing ones.
+ *
+ * `Celebration` (issue #53) is mounted here once, not per screen: it
+ * reads the shared `useCelebration()` state that `LogScreen` and
+ * `CategoryScreen` write to, so it works from either without either
+ * screen rendering its own overlay.
  */
 import { computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { PhChartBar, PhClockCounterClockwise, PhCookingPot, PhGift, PhListChecks } from '@phosphor-icons/vue'
+import Celebration from '@/components/Celebration.vue'
 import UpdateToast from '@/components/UpdateToast.vue'
-import { usePwa } from '@/composables/usePwa'
+import { CELEBRATION_IDS, useCelebration, type CelebrationId } from '@/composables/useCelebration'
+import { flagValue, usePwa } from '@/composables/usePwa'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
+
+function isCelebrationId(value: string | null): value is CelebrationId {
+  return value !== null && (CELEBRATION_IDS as readonly string[]).includes(value)
+}
+
+// Dev-only `?forceCelebration=<id>` (scripts/screenshots.mjs pattern, issue
+// #53): forces one specific moment on load instead of the random pick, for
+// a deterministic screenshot. Harmless in production; nobody links to the
+// app with this param.
+const forcedCelebration = flagValue('forceCelebration')
+if (isCelebrationId(forcedCelebration)) {
+  useCelebration().triggerExact(forcedCelebration, 'var(--primary)')
+}
 
 interface Tab {
   to: string
@@ -70,6 +90,7 @@ const statusNeedsAttention = computed(() => session.mode === 'demo' || !sync.onl
     </main>
 
     <UpdateToast v-if="needRefresh" @reload="reload" />
+    <Celebration />
 
     <nav class="app-shell__tabbar" aria-label="Primary">
       <RouterLink

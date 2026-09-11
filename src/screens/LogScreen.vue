@@ -13,7 +13,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import HouseholdBar from '@/components/HouseholdBar.vue'
 import QuickRow from '@/components/QuickRow.vue'
 import Toast from '@/components/Toast.vue'
-import { categoryIcon, categoryLabel, GRID_CATEGORIES } from '@/components/categoryIcons'
+import { categoryColor, categoryIcon, categoryLabel, GRID_CATEGORIES } from '@/components/categoryIcons'
+import { useCelebration } from '@/composables/useCelebration'
 import { useHaptic } from '@/composables/useHaptic'
 import { useToast } from '@/composables/useToast'
 import type { Category, Member } from '@/schemas'
@@ -28,6 +29,7 @@ const eventsStore = useEventsStore()
 const syncStore = useSyncStore()
 const { tick } = useHaptic()
 const { toast, show, dismiss } = useToast()
+const { trigger: triggerCelebration } = useCelebration()
 
 /** `eventsStore.doneTodayByTask` gives uids; the components below want the
  * `Member` for each, so this is the one place that resolves them. */
@@ -55,6 +57,7 @@ async function onQuickComplete(taskId: string): Promise<void> {
   const task = catalogStore.byId.get(taskId)
   tick()
   const pending = eventsStore.complete(taskId)
+  triggerCelebration(task ? categoryColor(task.category) : 'var(--primary)')
   const eventId = eventsStore.recentlyLogged?.eventId
   show({
     message: task ? `${task.name} logged` : 'Task logged',
