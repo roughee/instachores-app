@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Celebration from '@/components/Celebration.vue'
-import { useCelebration } from '@/composables/useCelebration'
+import { CELEBRATION_DURATION_MS, useCelebration } from '@/composables/useCelebration'
 
 const { celebration, trigger, triggerExact, clear } = useCelebration()
 
@@ -23,7 +23,7 @@ describe('Celebration', () => {
     const wrapper = mount(Celebration)
     expect(wrapper.find(`[data-test="celebration"].celebration__stage--${id}`).exists()).toBe(true)
 
-    vi.advanceTimersByTime(900)
+    vi.advanceTimersByTime(CELEBRATION_DURATION_MS)
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-test="celebration"]').exists()).toBe(false)

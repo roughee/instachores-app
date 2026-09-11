@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
  * Celebration overlay (issue #53, DESIGN.md §4 motion, §8 pre-flight):
- * mounted once in `App.vue`, fixed and pointer-events-none, near where
- * the toast appears. `useCelebration()` is the shared composable state
+ * mounted once in `App.vue`, fixed and pointer-events-none, centered on
+ * the screen (issue #59; it started out just above the toast). `useCelebration()` is the shared composable state
  * that `LogScreen` and `CategoryScreen` write to right next to their
  * existing `show()` toast call; this component only reads it, renders one
- * of ten Phosphor-icon moments for about 900ms, then removes it from the
+ * of ten Phosphor-icon moments for 2700ms, then removes it from the
  * DOM. It never blocks or delays the toast, the haptic tick, or Undo --
  * there is nothing here to await. Every moment ends with a short fade so
- * the removal at 900ms is never a hard cut.
+ * the removal at the end is never a hard cut.
  *
  * Every moment justified in one sentence:
  *   1. Smile pop (PhSmiley) - the plainest "nice one", no words needed.
@@ -101,11 +101,10 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 <style scoped>
 .celebration {
   position: fixed;
-  right: var(--safe-right);
-  bottom: calc(var(--touch) + var(--gutter) * 3 + var(--safe-bottom) + 88px);
-  left: var(--safe-left);
+  inset: 0;
   z-index: 21;
   display: flex;
+  align-items: center;
   justify-content: center;
   pointer-events: none;
 }

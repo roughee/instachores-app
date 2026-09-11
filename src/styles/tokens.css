@@ -45,11 +45,11 @@
   --dur-press: 120ms;
   --dur-sheet: 200ms;
   --dur-count: 300ms;
-  /* Issue #53: one shot per log, ~900ms, then removed from the DOM. Not
+  /* Issue #53: one shot per log, 2700ms since issue #59, then removed from the DOM. Not
      zeroed by the reduced-motion block below -- under reduced motion the
      celebration is skipped entirely instead (Celebration.vue), so this
      duration is only ever read when it is safe to animate. */
-  --dur-celebration: 900ms;
+  --dur-celebration: 2700ms;
 
   /* Category tints for tile backgrounds, derived from the hue above. */
   --cat-kitchen-soft: color-mix(in oklab, var(--cat-kitchen) 14%, var(--surface));

@@ -234,7 +234,7 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
 // below, same as the other issues' `forceX` flags) and the CSS animation's
 // own clock, which runs from mount regardless of any JS. So the freeze does
 // not wait and hope: the Web Animations API pauses every icon's animation
-// and sets its current time to 450ms of the 900ms moment, whatever the wall
+// and sets its current time to 1350ms of the 2700ms moment, whatever the wall
 // clock says. Every moment ends with a fade, so a late capture would
 // otherwise be blank.
 for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
@@ -245,7 +245,7 @@ for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
       const realSetTimeout = window.setTimeout
       // @ts-expect-error -- screenshot-only override, not shipped code
       window.setTimeout = (fn, delay, ...args) => {
-        if (delay === 900) return 0
+        if (delay === 2700) return 0
         return realSetTimeout(fn, delay, ...args)
       }
     })
@@ -255,7 +255,7 @@ for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
       for (const el of document.querySelectorAll('.celebration__icon')) {
         for (const animation of el.getAnimations()) {
           animation.pause()
-          animation.currentTime = 450
+          animation.currentTime = 1350
         }
       }
     })
