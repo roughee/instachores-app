@@ -60,8 +60,9 @@ export function categoryIcon(category: Category): Component {
   return ICONS[category] ?? PhNotepad
 }
 
-/** The `kid` category (the star board) has no tile color of its own, so
- * this falls back to `--primary`, same as the un-mapped label/icon above. */
-export function categoryColor(category: Category): string {
-  return COLOR_VARS[category] ?? 'var(--primary)'
+/** The `kid` category (the star board) has no tile color of its own, and a
+ * caller may have no category at all (a task not in the catalog, a dev
+ * flag); both fall back to `--primary`, same as the un-mapped label/icon above. */
+export function categoryColor(category?: Category): string {
+  return (category !== undefined ? COLOR_VARS[category] : undefined) ?? 'var(--primary)'
 }

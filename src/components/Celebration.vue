@@ -7,7 +7,8 @@
  * existing `show()` toast call; this component only reads it, renders one
  * of ten Phosphor-icon moments for about 900ms, then removes it from the
  * DOM. It never blocks or delays the toast, the haptic tick, or Undo --
- * there is nothing here to await.
+ * there is nothing here to await. Every moment ends with a short fade so
+ * the removal at 900ms is never a hard cut.
  *
  * Every moment justified in one sentence:
  *   1. Smile pop (PhSmiley) - the plainest "nice one", no words needed.
@@ -58,10 +59,17 @@ const ICONS: Record<CelebrationId, Component[]> = {
   'star-catch': [PhStar],
 }
 
+/**
+ * Deliberately larger than any UI icon (DESIGN.md §4: 24, 20 in chips): a
+ * celebration is a moment on top of the screen, not a control in it, and
+ * at 28px it read as a stray glyph on a phone. 56 fills the 64px stage
+ * with room for the overshoot; the sparkles and the rocket trail stay
+ * smaller so the burst reads as several small things, not one big one.
+ */
 function iconSize(id: CelebrationId, index: number): number {
-  if (id === 'sparkle-burst') return 18
-  if (id === 'rocket') return index === 0 ? 28 : 16
-  return 28
+  if (id === 'sparkle-burst') return 28
+  if (id === 'rocket') return index === 0 ? 56 : 24
+  return 56
 }
 
 const { celebration, reducedMotion } = useCelebrationOverlay()
@@ -103,8 +111,8 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 .celebration__stage {
   position: relative;
   display: flex;
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   align-items: center;
   justify-content: center;
 }
@@ -134,8 +142,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: scale(0.95) rotate(-3deg);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
     transform: scale(1) rotate(0deg);
   }
 }
@@ -156,8 +169,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: translateY(-4px) rotate(-10deg);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: translateY(0) rotate(-6deg);
+  }
+
+  100% {
+    opacity: 0;
     transform: translateY(0) rotate(-6deg);
   }
 }
@@ -179,8 +197,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: scaleY(1.1) translateY(-2px);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: scaleY(1) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
     transform: scaleY(1) translateY(0);
   }
 }
@@ -196,8 +219,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: scale(0.3) rotate(0deg);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: scale(1) rotate(90deg);
+  }
+
+  100% {
+    opacity: 0;
     transform: scale(1) rotate(90deg);
   }
 }
@@ -218,8 +246,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: translateX(2px) rotate(-8deg);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: translateX(0) rotate(6deg);
+  }
+
+  100% {
+    opacity: 0;
     transform: translateX(0) rotate(6deg);
   }
 }
@@ -255,8 +288,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: translateY(0);
   }
 
-  100% {
+  95% {
     opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
     transform: translateY(0);
   }
 }
@@ -303,8 +341,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
     transform: translateY(-4px) scale(0.98);
   }
 
-  100% {
+  88% {
     opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
     transform: translateY(0) scale(1);
   }
 }

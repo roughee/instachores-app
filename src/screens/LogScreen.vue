@@ -57,7 +57,7 @@ async function onQuickComplete(taskId: string): Promise<void> {
   const task = catalogStore.byId.get(taskId)
   tick()
   const pending = eventsStore.complete(taskId)
-  triggerCelebration(task ? categoryColor(task.category) : 'var(--primary)')
+  triggerCelebration(categoryColor(task?.category))
   const eventId = eventsStore.recentlyLogged?.eventId
   show({
     message: task ? `${task.name} logged` : 'Task logged',

@@ -15,6 +15,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { PhChartBar, PhClockCounterClockwise, PhCookingPot, PhGift, PhListChecks } from '@phosphor-icons/vue'
 import Celebration from '@/components/Celebration.vue'
+import { categoryColor } from '@/components/categoryIcons'
 import UpdateToast from '@/components/UpdateToast.vue'
 import { CELEBRATION_IDS, useCelebration, type CelebrationId } from '@/composables/useCelebration'
 import { flagValue, usePwa } from '@/composables/usePwa'
@@ -31,7 +32,7 @@ function isCelebrationId(value: string | null): value is CelebrationId {
 // app with this param.
 const forcedCelebration = flagValue('forceCelebration')
 if (isCelebrationId(forcedCelebration)) {
-  useCelebration().triggerExact(forcedCelebration, 'var(--primary)')
+  useCelebration().triggerExact(forcedCelebration, categoryColor())
 }
 
 interface Tab {

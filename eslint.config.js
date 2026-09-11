@@ -67,7 +67,7 @@ export default tseslint.config(
     },
   },
   {
-    // DESIGN.md §5 names them `Toast` and `Celebration` (issue #53); the
+    // `Toast` and `Celebration` (issue #53) are single-word on purpose: the
     // vue-multi-word convention exists so a component tag never collides
     // with a native HTML element, and there is no `<toast>` or
     // `<celebration>` element to collide with.

@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import Celebration from '@/components/Celebration.vue'
 import { useCelebration } from '@/composables/useCelebration'
 
-const { celebration, trigger, clear } = useCelebration()
+const { celebration, trigger, triggerExact, clear } = useCelebration()
 
 beforeEach(() => {
   clear()
@@ -29,12 +29,11 @@ describe('Celebration', () => {
     expect(wrapper.find('[data-test="celebration"]').exists()).toBe(false)
   })
 
-  it('renders one icon element per icon in the chosen moment (five for sparkle-burst)', () => {
-    trigger('var(--cat-kitchen)', () => 0.21) // deterministic index into the ten ids
-    const wrapper = mount(Celebration)
-    const id = celebration.value!.id
-    const expectedCount = id === 'sparkle-burst' ? 5 : id === 'rocket' ? 3 : 1
-    expect(wrapper.findAll('.celebration__icon')).toHaveLength(expectedCount)
+  it('renders five icon elements for sparkle-burst and one for a single-icon moment', () => {
+    triggerExact('sparkle-burst', 'var(--cat-kitchen)')
+    expect(mount(Celebration).findAll('.celebration__icon')).toHaveLength(5)
+    triggerExact('star-catch', 'var(--cat-kitchen)')
+    expect(mount(Celebration).findAll('.celebration__icon')).toHaveLength(1)
   })
 
   it('colors the icon from the given token, never a literal', () => {

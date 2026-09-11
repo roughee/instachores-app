@@ -227,19 +227,16 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   console.log(`saved 21-settings-${scheme}.png`)
 }
 
-// Issue #53: the celebration overlay, two of the ten moments, frozen
-// mid-animation. `?forceCelebration=<id>` (App.vue) sets the exact moment
-// instead of the random pick, at the same instant the app boots -- which
-// races two clocks against a real page load's own time (a few hundred ms
-// of parsing, fonts and the service worker registering): the JS removal
-// timer (defused below, same as the other issues' `forceX` flags) and the
-// CSS animation's own clock, which the browser starts ticking the moment
-// the element mounts and keeps running through page load regardless of
-// any JS override. `waitUntil: 'domcontentloaded'` (not `networkidle`,
-// used elsewhere in this file) hands control back as early as possible so
-// the ~200ms wait below reliably lands inside the animation's visible
-// window instead of past it, then `animation-play-state: paused` freezes
-// that frame for the actual screenshot.
+// Issue #53: the celebration overlay, two of the ten moments, frozen at a
+// fixed frame. `?forceCelebration=<id>` (App.vue) sets the exact moment
+// instead of the random pick, at the instant the app boots. Two clocks
+// would otherwise race a real page load: the JS removal timer (defused
+// below, same as the other issues' `forceX` flags) and the CSS animation's
+// own clock, which runs from mount regardless of any JS. So the freeze does
+// not wait and hope: the Web Animations API pauses every icon's animation
+// and sets its current time to 450ms of the 900ms moment, whatever the wall
+// clock says. Every moment ends with a fade, so a late capture would
+// otherwise be blank.
 for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
     const browser = await chromium.launch({ executablePath })
@@ -252,10 +249,16 @@ for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
         return realSetTimeout(fn, delay, ...args)
       }
     })
-    await page.goto(`${BASE_URL}?demo=1&forceCelebration=${id}#/log`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}?demo=1&forceCelebration=${id}#/log`, { waitUntil: 'networkidle' })
     await page.locator('[data-test="celebration"]').waitFor()
-    await page.waitForTimeout(200)
-    await page.addStyleTag({ content: '.celebration__icon { animation-play-state: paused !important; }' })
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll('.celebration__icon')) {
+        for (const animation of el.getAnimations()) {
+          animation.pause()
+          animation.currentTime = 450
+        }
+      }
+    })
     await page.screenshot({ path: `${OUT_DIR}53-celebration-${id}-${scheme}.png` })
     await browser.close()
     console.log(`saved 53-celebration-${id}-${scheme}.png`)

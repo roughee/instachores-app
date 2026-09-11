@@ -90,7 +90,7 @@ function showLoggedToast(message: string): void {
 /** Every task on this screen shares the route's category, so this is
  * cheaper than resolving each tapped task's own `category` field. */
 function celebrationColor(): string {
-  return category.value.success ? categoryColor(category.value.data) : 'var(--primary)'
+  return categoryColor(category.value.success ? category.value.data : undefined)
 }
 
 async function onComplete(taskId: string): Promise<void> {
