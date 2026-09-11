@@ -35,9 +35,10 @@
  * `globalThis.HomeCrew`, which is the one thing that survives the call and
  * the one thing the tests import. This was chosen over structuring the
  * whole file as a `new Function(...)`-returned value because Apps Script
- * itself requires `doPost`, `setupTemplate_` and `test_` to be ordinary
+ * itself requires `doPost`, `setupTemplate` and `runTests` to be ordinary
  * top-level function declarations (that is how the editor's "run function"
- * picker and the web app trigger find them) — so the file has to look like
+ * picker and the web app trigger find them; names ending in `_` are hidden
+ * from that picker, which is why the public wrappers exist) — so the file has to look like
  * a normal .gs file first, and the globalThis assignment is added on top,
  * not instead.
  */
@@ -470,6 +471,26 @@ function setupTemplate_(ss) {
 }
 
 /**
+ * Public entry point for the editor's Run picker (issue #49). Apps Script
+ * hides every function whose name ends in `_` from that picker, so the
+ * helper above cannot be selected directly. This wrapper is what the
+ * procedure in docs/Setup.md tells the human to run; it always acts on the
+ * bound (active) spreadsheet.
+ */
+function setupTemplate() {
+  return setupTemplate_()
+}
+
+/**
+ * Public entry point for `test_()` below, for the same reason as
+ * `setupTemplate()` (issue #49). Select `runTests` in the Run picker before
+ * every deploy.
+ */
+function runTests() {
+  test_()
+}
+
+/**
  * Runs the acceptance scenarios against a scratch spreadsheet, logs
  * PASS/FAIL per scenario, and trashes the scratch file when done. Run this
  * from the Apps Script editor (select `test_`, then Run) before every
@@ -690,5 +711,7 @@ if (typeof globalThis !== 'undefined') {
     makeCtx: makeCtx,
     handleRequest: handleRequest,
     setupTemplate_: setupTemplate_,
+    setupTemplate: setupTemplate,
+    runTests: runTests,
   }
 }

@@ -5,7 +5,7 @@
  * fresh secret, a check that the deployed Apps Script answers correctly,
  * seeding the catalog, formatting the members rows, and building the setup
  * link. What it cannot do — creating the sheet, pasting Code.js, running
- * setupTemplate_, deploying — stays a human click in the Apps Script editor
+ * setupTemplate, deploying — stays a human click in the Apps Script editor
  * (docs/Architecture.md §5, §7).
  *
  * Run with `npm run household -- <command> [flags]`. See USAGE below, or run
