@@ -66,7 +66,10 @@ const ICONS: Record<CelebrationId, Component[]> = {
  * 96 fills the 112px stage with room for the overshoot; the sparkles and
  * the rocket trail stay smaller so the burst reads as several small
  * things, not one big one. Every offset in the keyframes is scaled with
- * the icon so the motion keeps its shape.
+ * the icon so the motion keeps its shape. For the same reason the icons
+ * use Phosphor's `fill` weight (issue #61), not the `regular` weight every
+ * UI icon uses (DESIGN.md §4): a solid star reads as a reward, an outline
+ * reads as a control.
  */
 function iconSize(id: CelebrationId, index: number): number {
   if (id === 'sparkle-burst') return 48
@@ -91,7 +94,7 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
         v-for="(icon, i) in ICONS[celebration.id]"
         :key="i"
         :size="iconSize(celebration.id, i)"
-        weight="regular"
+        weight="fill"
         class="celebration__icon"
       />
     </div>
