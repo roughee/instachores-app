@@ -62,14 +62,16 @@ const ICONS: Record<CelebrationId, Component[]> = {
 /**
  * Deliberately larger than any UI icon (DESIGN.md §4: 24, 20 in chips): a
  * celebration is a moment on top of the screen, not a control in it, and
- * at 28px it read as a stray glyph on a phone. 56 fills the 64px stage
- * with room for the overshoot; the sparkles and the rocket trail stay
- * smaller so the burst reads as several small things, not one big one.
+ * at 28px and then 56px it still read as modest on a phone (issue #57).
+ * 96 fills the 112px stage with room for the overshoot; the sparkles and
+ * the rocket trail stay smaller so the burst reads as several small
+ * things, not one big one. Every offset in the keyframes is scaled with
+ * the icon so the motion keeps its shape.
  */
 function iconSize(id: CelebrationId, index: number): number {
-  if (id === 'sparkle-burst') return 28
-  if (id === 'rocket') return index === 0 ? 56 : 24
-  return 56
+  if (id === 'sparkle-burst') return 48
+  if (id === 'rocket') return index === 0 ? 96 : 36
+  return 96
 }
 
 const { celebration, reducedMotion } = useCelebrationOverlay()
@@ -111,8 +113,8 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 .celebration__stage {
   position: relative;
   display: flex;
-  width: 64px;
-  height: 64px;
+  width: 112px;
+  height: 112px;
   align-items: center;
   justify-content: center;
 }
@@ -161,12 +163,12 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-wink {
   0% {
     opacity: 0;
-    transform: translateY(16px) rotate(0deg);
+    transform: translateY(27px) rotate(0deg);
   }
 
   60% {
     opacity: 1;
-    transform: translateY(-4px) rotate(-10deg);
+    transform: translateY(-7px) rotate(-10deg);
   }
 
   88% {
@@ -189,12 +191,12 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-tree {
   0% {
     opacity: 0;
-    transform: scaleY(0.2) translateY(12px);
+    transform: scaleY(0.2) translateY(21px);
   }
 
   70% {
     opacity: 1;
-    transform: scaleY(1.1) translateY(-2px);
+    transform: scaleY(1.1) translateY(-3px);
   }
 
   88% {
@@ -238,12 +240,12 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-cat {
   0% {
     opacity: 0;
-    transform: translateX(-24px) rotate(0deg);
+    transform: translateX(-41px) rotate(0deg);
   }
 
   60% {
     opacity: 1;
-    transform: translateX(2px) rotate(-8deg);
+    transform: translateX(3px) rotate(-8deg);
   }
 
   88% {
@@ -265,7 +267,7 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-dog {
   0% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
 
   15% {
@@ -273,7 +275,7 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
   }
 
   30% {
-    transform: translateY(-10px);
+    transform: translateY(-17px);
   }
 
   50% {
@@ -281,7 +283,7 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
   }
 
   70% {
-    transform: translateY(-10px);
+    transform: translateY(-17px);
   }
 
   90% {
@@ -307,17 +309,17 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-bird {
   0% {
     opacity: 0;
-    transform: translate(0, 6px) rotate(0deg);
+    transform: translate(0, 10px) rotate(0deg);
   }
 
   40% {
     opacity: 1;
-    transform: translate(14px, -14px) rotate(10deg);
+    transform: translate(24px, -24px) rotate(10deg);
   }
 
   100% {
     opacity: 0;
-    transform: translate(32px, -34px) rotate(16deg);
+    transform: translate(55px, -58px) rotate(16deg);
   }
 }
 
@@ -329,16 +331,16 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-star {
   0% {
     opacity: 0;
-    transform: translateY(-28px) scale(0.7);
+    transform: translateY(-48px) scale(0.7);
   }
 
   60% {
     opacity: 1;
-    transform: translateY(4px) scale(1.05);
+    transform: translateY(7px) scale(1.05);
   }
 
   80% {
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-7px) scale(0.98);
   }
 
   88% {
@@ -363,27 +365,27 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 
 .celebration__stage--sparkle-burst .celebration__icon:nth-child(1) {
   --sparkle-x: 0px;
-  --sparkle-y: -22px;
+  --sparkle-y: -38px;
 }
 
 .celebration__stage--sparkle-burst .celebration__icon:nth-child(2) {
-  --sparkle-x: 21px;
-  --sparkle-y: -7px;
+  --sparkle-x: 36px;
+  --sparkle-y: -12px;
 }
 
 .celebration__stage--sparkle-burst .celebration__icon:nth-child(3) {
-  --sparkle-x: 13px;
-  --sparkle-y: 18px;
+  --sparkle-x: 22px;
+  --sparkle-y: 31px;
 }
 
 .celebration__stage--sparkle-burst .celebration__icon:nth-child(4) {
-  --sparkle-x: -13px;
-  --sparkle-y: 18px;
+  --sparkle-x: -22px;
+  --sparkle-y: 31px;
 }
 
 .celebration__stage--sparkle-burst .celebration__icon:nth-child(5) {
-  --sparkle-x: -21px;
-  --sparkle-y: -7px;
+  --sparkle-x: -36px;
+  --sparkle-y: -12px;
 }
 
 @keyframes celebration-sparkle {
@@ -409,13 +411,13 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 }
 
 .celebration__stage--rocket .celebration__icon:nth-child(2) {
-  --trail-x: -10px;
+  --trail-x: -17px;
 
   animation: celebration-rocket-trail var(--dur-celebration) ease-out forwards;
 }
 
 .celebration__stage--rocket .celebration__icon:nth-child(3) {
-  --trail-x: 10px;
+  --trail-x: 17px;
 
   animation: celebration-rocket-trail var(--dur-celebration) ease-out forwards;
 }
@@ -423,34 +425,34 @@ const { celebration, reducedMotion } = useCelebrationOverlay()
 @keyframes celebration-rocket {
   0% {
     opacity: 0;
-    transform: translateY(16px) rotate(-4deg);
+    transform: translateY(27px) rotate(-4deg);
   }
 
   40% {
     opacity: 1;
-    transform: translateY(-6px) rotate(0deg);
+    transform: translateY(-10px) rotate(0deg);
   }
 
   100% {
     opacity: 0;
-    transform: translateY(-56px) rotate(4deg);
+    transform: translateY(-96px) rotate(4deg);
   }
 }
 
 @keyframes celebration-rocket-trail {
   0% {
     opacity: 0;
-    transform: translate(var(--trail-x), 20px) scale(0.6);
+    transform: translate(var(--trail-x), 34px) scale(0.6);
   }
 
   50% {
     opacity: 1;
-    transform: translate(var(--trail-x), 2px) scale(1);
+    transform: translate(var(--trail-x), 3px) scale(1);
   }
 
   100% {
     opacity: 0;
-    transform: translate(var(--trail-x), -22px) scale(0.4);
+    transform: translate(var(--trail-x), -38px) scale(0.4);
   }
 }
 </style>
