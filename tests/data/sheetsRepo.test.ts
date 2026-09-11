@@ -29,6 +29,20 @@ function memoryStore(): KvStore {
   }
 }
 
+/** A snapshot store already holding a household, for tests about polling that never `connect()`: without one, `sync()` would (correctly, #52) bootstrap instead of polling. */
+async function seededSnapshotStore(): Promise<KvStore> {
+  const store = memoryStore()
+  const h = household()
+  await new Snapshot(store).write({
+    household: h,
+    members: Object.values(h.members),
+    tasks: [],
+    rewards: [],
+    events: [],
+  })
+  return store
+}
+
 function jsonResponse(body: unknown): Response {
   return { json: () => Promise.resolve(body) } as Response
 }
@@ -220,7 +234,7 @@ describe('SheetsRepo: outbox flush and retry', () => {
       link: LINK,
       householdId: HID,
       outbox,
-      snapshot: new Snapshot(memoryStore()),
+      snapshot: new Snapshot(await seededSnapshotStore()),
       fetch: fetchImpl,
     })
     await repo.init()
@@ -323,15 +337,7 @@ describe('SheetsRepo: polling', () => {
     })
     // Seeded with a household already, so this poll is not also the first
     // sync with no household (#52), which would refresh the catalog instead.
-    const snapshotStore = memoryStore()
-    const h = household()
-    await new Snapshot(snapshotStore).write({
-      household: h,
-      members: Object.values(h.members),
-      tasks: [],
-      rewards: [],
-      events: [],
-    })
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
@@ -386,15 +392,7 @@ describe('SheetsRepo: polling', () => {
     // Seeded with a household already, so these two polls are not also the
     // first sync with no household (#52), which would refresh the catalog
     // instead of polling on the first call.
-    const snapshotStore = memoryStore()
-    const h = household()
-    await new Snapshot(snapshotStore).write({
-      household: h,
-      members: Object.values(h.members),
-      tasks: [],
-      rewards: [],
-      events: [],
-    })
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
@@ -421,15 +419,7 @@ describe('SheetsRepo: polling', () => {
     })
     // Seeded with a household already, so this poll is not also the first
     // sync with no household (#52), which would refresh the catalog instead.
-    const snapshotStore = memoryStore()
-    const h = household()
-    await new Snapshot(snapshotStore).write({
-      household: h,
-      members: Object.values(h.members),
-      tasks: [],
-      rewards: [],
-      events: [],
-    })
+    const snapshotStore = await seededSnapshotStore()
     const repo = new SheetsRepo({
       link: LINK,
       householdId: HID,
@@ -627,6 +617,100 @@ describe('sync', () => {
     expect(seenRewards).toEqual([currentReward])
   })
 
+  it('keeps refreshing on every timer sync while the household is still missing, until one succeeds', async () => {
+    // A resumed session with no household whose first bootstrap fails must
+    // not fall back to nine event polls (#52 review): it retries the refresh
+    // on the next tick, and stops once a household has arrived.
+    const actions: string[] = []
+    let bootstrapCalls = 0
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      actions.push(body.action)
+      if (body.action === 'bootstrap') {
+        bootstrapCalls++
+        if (bootstrapCalls === 1) return jsonResponse({ ok: false, code: 'unauthorized' })
+        return jsonResponse(bootstrapBody())
+      }
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+      throw new Error(`unexpected action: ${body.action}`)
+    })
+    const repo = newRepo(fetchImpl)
+    await repo.init()
+
+    await repo.sync()
+    await repo.sync()
+    await repo.sync()
+
+    expect(actions).toEqual(['bootstrap', 'bootstrap', 'events.since'])
+  })
+
+  it('start() syncs at once when the snapshot has no household, instead of waiting a full interval', async () => {
+    vi.useFakeTimers()
+    try {
+      const actions: string[] = []
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = parsedBody(init)
+        actions.push(body.action)
+        if (body.action === 'bootstrap') return jsonResponse(bootstrapBody())
+        if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+        throw new Error(`unexpected action: ${body.action}`)
+      })
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+      })
+      await repo.init()
+      repo.start()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(actions).toEqual(['bootstrap'])
+      let seenHousehold: HouseholdT | undefined
+      repo.watchHousehold(HID, (h) => (seenHousehold = h))
+      expect(seenHousehold?.name).toBe(CATALOG_HOUSEHOLD.name)
+
+      // The recovered household means the next tick is an ordinary poll, on the normal cadence.
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(actions).toEqual(['bootstrap', 'events.since'])
+      repo.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('start() with a household in the snapshot waits for the interval as before', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = parsedBody(init)
+        if (body.action === 'bootstrap') return jsonResponse(bootstrapBody())
+        if (body.action === 'events.since') return jsonResponse({ ok: true, events: [], serverTime: 'x' })
+        throw new Error(`unexpected action: ${body.action}`)
+      })
+      const repo = new SheetsRepo({
+        link: LINK,
+        householdId: HID,
+        outbox: new Outbox(memoryStore()),
+        snapshot: new Snapshot(memoryStore()),
+        fetch: fetchImpl,
+        timers: { setTimeout, clearTimeout },
+      })
+      await repo.connect(LINK)
+      fetchImpl.mockClear()
+      repo.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchImpl).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      repo.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('a refresh never touches the outbox', async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = parsedBody(init)
@@ -672,7 +756,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
@@ -706,7 +790,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
         pollIntervalMs: 1_000,
@@ -736,7 +820,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
@@ -782,7 +866,7 @@ describe('SheetsRepo: poller backoff', () => {
         link: LINK,
         householdId: HID,
         outbox: new Outbox(memoryStore()),
-        snapshot: new Snapshot(memoryStore()),
+        snapshot: new Snapshot(await seededSnapshotStore()),
         fetch: fetchImpl,
         timers: { setTimeout, clearTimeout },
       })
