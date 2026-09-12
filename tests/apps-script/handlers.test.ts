@@ -34,6 +34,7 @@ const TASKS_HEADERS = [
   'forRole',
   'parentId',
   'comboBonus',
+  'intervalDays',
   'archived',
   'sort',
   'updatedAt',
@@ -56,6 +57,8 @@ const EVENTS_HEADERS = [
   'cost',
   'combo',
   'day',
+  'dueAt',
+  'days',
 ]
 
 function makeWorld(
@@ -133,6 +136,8 @@ describe('events.append', () => {
           'pots',
           'ana',
           '2',
+          '',
+          '',
           '',
           '',
           '',
@@ -349,6 +354,8 @@ describe('events.since', () => {
         '',
         '',
         '',
+        '',
+        '',
       ],
       [
         '1',
@@ -366,6 +373,8 @@ describe('events.since', () => {
         '',
         '',
         '',
+        '',
+        '',
       ],
       [
         '1',
@@ -378,6 +387,8 @@ describe('events.since', () => {
         'counters',
         'ben',
         '3',
+        '',
+        '',
         '',
         '',
         '',
@@ -418,6 +429,7 @@ describe('tasks.upsert', () => {
     '2',
     'daily',
     'adult',
+    '',
     '',
     '',
     'FALSE',
@@ -576,12 +588,138 @@ describe('seed', () => {
     const { HomeCrew, ctx, ss } = makeWorld({
       tasks: [
         TASKS_HEADERS,
-        ['1', 't1', 'Pots', 'kitchen', '2', 'daily', 'adult', '', '', 'FALSE', '0', '2026-09-01T00:00:00.000Z', 'ana'],
+        [
+          '1',
+          't1',
+          'Pots',
+          'kitchen',
+          '2',
+          'daily',
+          'adult',
+          '',
+          '',
+          '',
+          'FALSE',
+          '0',
+          '2026-09-01T00:00:00.000Z',
+          'ana',
+        ],
       ],
     })
     const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'seed', tasks: [], rewards: [] }))
     expect(res).toMatchObject({ ok: false, code: 'invalid' })
     expect(ss.getSheetByName('rewards')!.snapshot().length).toBe(1)
+  })
+})
+
+describe('schedule columns (issue #67)', () => {
+  it('adds intervalDays to the tasks header, right after comboBonus', () => {
+    const { HomeCrew } = makeWorld()
+    const tasksHeaders = HomeCrew.HEADERS.tasks!
+    expect(tasksHeaders).toEqual(TASKS_HEADERS)
+    expect(tasksHeaders.indexOf('intervalDays')).toBe(tasksHeaders.indexOf('comboBonus') + 1)
+  })
+
+  it('adds dueAt and days to the events header', () => {
+    const { HomeCrew } = makeWorld()
+    expect(HomeCrew.HEADERS.events).toEqual(EVENTS_HEADERS)
+    expect(HomeCrew.HEADERS.events).toContain('dueAt')
+    expect(HomeCrew.HEADERS.events).toContain('days')
+  })
+
+  it('seed writes intervalDays for a task that has one, and a blank cell for a task that does not', () => {
+    const { HomeCrew, ctx, ss } = makeWorld()
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, {
+        secret: SECRET,
+        action: 'seed',
+        tasks: [
+          {
+            v: 1,
+            id: 't1',
+            name: 'Fridge cleanout',
+            category: 'kitchen',
+            points: 4,
+            freq: 'biweekly',
+            forRole: 'adult',
+            intervalDays: 14,
+            archived: false,
+            sort: 0,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            updatedBy: 'ana',
+          },
+          {
+            v: 1,
+            id: 't2',
+            name: 'Pots',
+            category: 'kitchen',
+            points: 2,
+            freq: 'daily',
+            forRole: 'adult',
+            archived: false,
+            sort: 1,
+            updatedAt: '2026-09-01T00:00:00.000Z',
+            updatedBy: 'ana',
+          },
+        ],
+        rewards: [],
+      }),
+    )
+    expect(res).toMatchObject({ ok: true, tasks: 2 })
+    const rows = ss.getSheetByName('tasks')!.snapshot()
+    const withInterval = HomeCrew.rowToObject(TASKS_HEADERS, rows[1] as unknown[])
+    const withoutInterval = HomeCrew.rowToObject(TASKS_HEADERS, rows[2] as unknown[])
+    expect(withInterval.intervalDays).toBe(14)
+    expect(withoutInterval.intervalDays).toBe('')
+  })
+
+  it('objectToRow puts dueAt and days in their own cells, and rowToObject reads them back, for a schedule event', () => {
+    const { HomeCrew, ctx, ss } = makeWorld()
+    const scheduleEvent = {
+      v: 1,
+      id: 'sched-1',
+      type: 'schedule',
+      actorUid: 'ana',
+      at: '2026-09-09T18:00:00.000Z',
+      taskId: 'task-pots',
+      refEventId: 'complete-1',
+      dueAt: '2026-09-23T00:00:00.000Z',
+      days: 14,
+    }
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.append', events: [scheduleEvent] }),
+    )
+    expect(res.ok).toBe(true)
+
+    const rows = ss.getSheetByName('events')!.snapshot()
+    const obj = HomeCrew.rowToObject(EVENTS_HEADERS, rows[1] as unknown[])
+    expect(obj.dueAt).toBe('2026-09-23T00:00:00.000Z')
+    expect(obj.days).toBe(14)
+    expect(obj.type).toBe('schedule')
+    expect(obj.refEventId).toBe('complete-1')
+  })
+
+  it('an unschedule event round-trips with blank dueAt/days cells', () => {
+    const { HomeCrew, ctx, ss } = makeWorld()
+    const unscheduleEvent = {
+      v: 1,
+      id: 'unsched-1',
+      type: 'unschedule',
+      actorUid: 'ana',
+      at: '2026-09-10T18:00:00.000Z',
+      refEventId: 'sched-1',
+    }
+    const res = parseResult(
+      HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'events.append', events: [unscheduleEvent] }),
+    )
+    expect(res.ok).toBe(true)
+
+    const rows = ss.getSheetByName('events')!.snapshot()
+    const obj = HomeCrew.rowToObject(EVENTS_HEADERS, rows[1] as unknown[])
+    expect(obj.dueAt).toBe('')
+    expect(obj.days).toBe('')
+    expect(obj.type).toBe('unschedule')
+    expect(obj.refEventId).toBe('sched-1')
   })
 })
 
@@ -650,6 +788,7 @@ describe('sheet row bookkeeping', () => {
     '2',
     'daily',
     'adult',
+    '',
     '',
     '',
     'FALSE',

@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildSeedPayload,
   buildSetupLinkUrl,
+  checkScheduleColumns,
   describeSeedRefusal,
   evaluateCheckResults,
   flagValue,
@@ -22,6 +23,7 @@ import {
   parseMemberSpec,
   resolveSecret,
 } from '../../scripts/household.ts'
+import { SEED_IDS } from '../../src/domain/seed.ts'
 
 describe('parseArgv', () => {
   it('reads the command and single-valued flags', () => {
@@ -219,6 +221,69 @@ describe('buildSeedPayload', () => {
     expect(payload.rewards.length).toBeGreaterThan(0)
     expect(payload.tasks.every((t) => t.updatedBy === 'setup')).toBe(true)
     expect(payload.tasks.every((t) => t.updatedAt.getTime() === now.getTime())).toBe(true)
+  })
+
+  it('carries intervalDays for the seed rows that have one, and serializes it as a plain number over the wire (issue #67)', () => {
+    const now = new Date('2026-09-08T00:00:00.000Z')
+    const payload = buildSeedPayload(now, 'setup')
+
+    const fridge = payload.tasks.find((t) => t.id === SEED_IDS.fridge)
+    const pots = payload.tasks.find((t) => t.id === SEED_IDS.pots)
+    expect(fridge?.intervalDays).toBe(14)
+    expect(pots?.intervalDays).toBeUndefined()
+
+    // buildSeedPayload's result is exactly what postAction JSON.stringifies
+    // and sends as the seed action's body: a Date's own toJSON() -> ISO
+    // string, a plain number stays a number (Architecture §5's seed action,
+    // not the sheet's plain-text cells, which apps-script/Code.js writes on
+    // its own side).
+    const overWire = JSON.parse(JSON.stringify(payload)) as { tasks: { id: string; intervalDays?: number }[] }
+    const fridgeOverWire = overWire.tasks.find((t) => t.id === SEED_IDS.fridge)
+    expect(fridgeOverWire?.intervalDays).toBe(14)
+    expect(typeof fridgeOverWire?.intervalDays).toBe('number')
+  })
+})
+
+describe('checkScheduleColumns', () => {
+  it('reports a column present when at least one returned row carries the key', () => {
+    const result = checkScheduleColumns({
+      tasks: [{ id: 't1', intervalDays: 14 }],
+      events: [{ id: 'e1', dueAt: '2026-09-23T00:00:00.000Z', days: 14 }],
+    })
+
+    expect(result).toEqual([
+      { column: 'tasks.intervalDays', status: 'present' },
+      { column: 'events.dueAt', status: 'present' },
+      { column: 'events.days', status: 'present' },
+    ])
+  })
+
+  it('reports a column present even when every row has it blank, since the key itself still shows up', () => {
+    const result = checkScheduleColumns({
+      tasks: [{ id: 't1', intervalDays: '' }],
+      events: [{ id: 'e1', dueAt: '', days: '' }],
+    })
+
+    expect(result.every((c) => c.status === 'present')).toBe(true)
+  })
+
+  it('reports a column missing when rows exist but none carries the key', () => {
+    const result = checkScheduleColumns({
+      tasks: [{ id: 't1' }],
+      events: [{ id: 'e1' }],
+    })
+
+    expect(result).toEqual([
+      { column: 'tasks.intervalDays', status: 'missing' },
+      { column: 'events.dueAt', status: 'missing' },
+      { column: 'events.days', status: 'missing' },
+    ])
+  })
+
+  it('reports unknown, not missing, when there are no rows to check at all', () => {
+    const result = checkScheduleColumns({ tasks: [], events: [] })
+
+    expect(result.every((c) => c.status === 'unknown')).toBe(true)
   })
 })
 

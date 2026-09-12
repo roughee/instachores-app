@@ -62,6 +62,7 @@ var HEADERS = {
     'forRole',
     'parentId',
     'comboBonus',
+    'intervalDays',
     'archived',
     'sort',
     'updatedAt',
@@ -84,6 +85,8 @@ var HEADERS = {
     'cost',
     'combo',
     'day',
+    'dueAt',
+    'days',
   ],
 }
 

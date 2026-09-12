@@ -57,6 +57,48 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+/**
+ * The `events` tab's header row (Architecture §4), used below to mimic
+ * apps-script/Code.js's `objectToRow`/`rowToObject` (issue #67): every cell
+ * on a real sheet is plain text, so a value that survives this round trip --
+ * not just `JSON.stringify` -- proves the Zod schema's own coercions
+ * (`Int`'s `numish`, `DateT`'s `z.coerce.date()`) do the work, the way a real
+ * poll response would need them to.
+ */
+const FAKE_EVENTS_HEADERS = [
+  'v',
+  'id',
+  'type',
+  'actorUid',
+  'at',
+  'loggedAt',
+  'note',
+  'taskId',
+  'forUid',
+  'points',
+  'refEventId',
+  'rewardId',
+  'cost',
+  'combo',
+  'day',
+  'dueAt',
+  'days',
+]
+
+/** One cell: undefined/null -> '', Date -> ISO string, everything else -> its own string form. */
+function toSheetCellValue(v: unknown): string {
+  if (v === undefined || v === null) return ''
+  if (v instanceof Date) return v.toISOString()
+  return String(v)
+}
+
+/** An object -> a plain-text sheet row, keyed by header, the way `rowToObject` hands rows back to the client. */
+function toSheetRow(headers: string[], obj: Record<string, unknown>): Record<string, string> {
+  const row: Record<string, string> = {}
+  for (const h of headers) row[h] = toSheetCellValue(obj[h])
+  return row
+}
+
 describe('SheetsRepo: watchers fire synchronously from the snapshot', () => {
   it('calls back immediately from the loaded snapshot, never waiting on fetch', async () => {
     const store = memoryStore()
@@ -435,6 +477,72 @@ describe('SheetsRepo: polling', () => {
 
     expect(status?.skippedRows).toBe(1)
     expect(status?.lastSkipped).toEqual({ tab: 'events', id: 'ev-bad-1' })
+  })
+})
+
+describe('SheetsRepo: schedule columns round-trip (issue #67)', () => {
+  it('a schedule and an unschedule event survive events.append and come back through events.since via the fake sheet, dueAt a Date and days an int', async () => {
+    const t = task()
+    const c = complete(t)
+    const scheduleEvent = event('schedule', {
+      taskId: t.id,
+      refEventId: c.id,
+      dueAt: new Date('2026-09-23T00:00:00.000Z'),
+      days: 14,
+    })
+    const unscheduleEvent = event('unschedule', { refEventId: scheduleEvent.id })
+
+    // The fake "events" tab: appended events are stored as plain-text cells
+    // (mirroring apps-script/Code.js's objectToRow), and events.since hands
+    // those same text rows back (mirroring rowToObject) instead of the typed
+    // objects the test built, exactly like the real sheet would.
+    const sheetRows: Record<string, string>[] = []
+    let appendCalls = 0
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = parsedBody(init)
+      if (body.action === 'events.append') {
+        appendCalls++
+        const loggedAt = new Date(2026, 8, 9, 18, appendCalls).toISOString()
+        const events = body.events as Record<string, unknown>[]
+        for (const ev of events) sheetRows.push(toSheetRow(FAKE_EVENTS_HEADERS, { ...ev, loggedAt }))
+        return jsonResponse({ ok: true, appended: events.map((e) => e.id), skipped: [], loggedAt })
+      }
+      if (body.action === 'events.since') return jsonResponse({ ok: true, events: sheetRows, serverTime: 'x' })
+      throw new Error(`unexpected action in test: ${body.action}`)
+    })
+
+    const repo = new SheetsRepo({
+      link: LINK,
+      householdId: HID,
+      outbox: new Outbox(memoryStore()),
+      snapshot: new Snapshot(await seededSnapshotStore()),
+      fetch: fetchImpl,
+    })
+    await repo.init()
+
+    await repo.appendEvent(HID, scheduleEvent)
+    await settle()
+    await repo.appendEvent(HID, unscheduleEvent)
+    await settle()
+
+    let seen: ChoreEventT[] = []
+    repo.watchEvents(HID, new Date(0), (e) => (seen = e))
+
+    // Sheet cells are text, so a value that comes back as a real Date/number
+    // here was coerced by the Zod schema, not carried over as-is from JSON.
+    const gotSchedule = seen.find((e) => e.id === scheduleEvent.id)
+    const gotUnschedule = seen.find((e) => e.id === unscheduleEvent.id)
+    expect(gotSchedule?.type).toBe('schedule')
+    expect(gotUnschedule?.type).toBe('unschedule')
+    if (gotSchedule?.type !== 'schedule') throw new Error('expected a schedule event')
+    if (gotUnschedule?.type !== 'unschedule') throw new Error('expected an unschedule event')
+    expect(gotSchedule.dueAt).toBeInstanceOf(Date)
+    expect(gotSchedule.dueAt.toISOString()).toBe('2026-09-23T00:00:00.000Z')
+    expect(gotSchedule.days).toBe(14)
+    expect(typeof gotSchedule.days).toBe('number')
+    expect(gotSchedule.taskId).toBe(t.id)
+    expect(gotSchedule.refEventId).toBe(c.id)
+    expect(gotUnschedule.refEventId).toBe(scheduleEvent.id)
   })
 })
 
