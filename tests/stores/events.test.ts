@@ -4,6 +4,7 @@ import { MemoryRepo } from '@/data/memoryRepo'
 import { deriveState } from '@/domain/derive'
 import { SEED_IDS } from '@/domain/seed'
 import { completes, liveEvents } from '@/domain/events'
+import { deriveSchedule, dueDayFor } from '@/domain/schedule'
 import { DAY_MS, dayKey, startOfWeek } from '@/domain/time'
 import { ChoreEvent } from '@/schemas'
 import { configureSession, useSessionStore } from '@/stores/session'
@@ -544,5 +545,175 @@ describe('eventsStore.weekRollup / week navigation (issue #19)', () => {
     expect(eventsStore.weekRollup.household).toBe(0)
     expect(eventsStore.weekRollup.target).toBe(0)
     expect(eventsStore.weekRollup.byCategory).toEqual({})
+  })
+})
+
+describe('eventsStore.schedule (issue #68)', () => {
+  it('is empty before a household has loaded', () => {
+    const eventsStore = useEventsStore()
+    expect(eventsStore.schedule.size).toBe(0)
+  })
+
+  it('is exactly domain.deriveSchedule’s output for the current events/tasks/household/now', async () => {
+    const pots = task({ id: 'task-pots', points: 4, freq: 'weekly' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore, catalogStore, householdStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+
+    const expected = deriveSchedule({
+      events: eventsStore.events,
+      tasks: catalogStore.tasks,
+      household: householdStore.household!,
+      now: clock,
+    })
+    expect(eventsStore.schedule).toEqual(expected)
+  })
+})
+
+describe('eventsStore.scheduleNext (issue #68)', () => {
+  it('appends one schedule event referencing the complete, with the right shape', async () => {
+    const pots = task({ id: 'task-pots', points: 4, freq: 'weekly' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+
+    await eventsStore.scheduleNext(original.id, 7)
+
+    const scheds = eventsStore.events.filter((e) => e.type === 'schedule')
+    expect(scheds).toHaveLength(1)
+    const sched = scheds[0]!
+    expect(ChoreEvent.safeParse(sched).success).toBe(true)
+    expect(sched.taskId).toBe('task-pots')
+    expect(sched.refEventId).toBe(original.id)
+    expect(sched.days).toBe(7)
+    expect(sched.dueAt).toEqual(dueDayFor(original.at, 7, TZ))
+    expect(sched.actorUid).toBe(ANA)
+  })
+
+  it('turns the task away in derived.schedule', async () => {
+    const pots = task({ id: 'task-pots', points: 4, freq: 'weekly' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    await eventsStore.scheduleNext(original.id, 7)
+
+    expect(eventsStore.schedule.get('task-pots')?.state).toBe('away')
+  })
+
+  it('excludes the away task from quickRow', async () => {
+    const t = task({ id: 'task-x', points: 2, freq: 'adhoc' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [t] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-x')
+    expect(eventsStore.derived.quickRow.some((x) => x.id === 'task-x')).toBe(true)
+
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    await eventsStore.scheduleNext(original.id, 30)
+
+    expect(eventsStore.derived.quickRow.some((x) => x.id === 'task-x')).toBe(false)
+  })
+
+  it('excludes the away task’s category from dueDots', async () => {
+    const vacuum = task({ id: 'task-vacuum', points: 5, freq: 'weekly', category: 'floors' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [vacuum] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-vacuum', { at: new Date(NOW.getTime() - 20 * DAY_MS) })
+    expect(eventsStore.derived.dueDots.floors).toBe(true)
+
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    await eventsStore.scheduleNext(original.id, 30)
+
+    expect(eventsStore.derived.dueDots.floors).toBe(false)
+  })
+
+  it('is a no-op when the complete event does not exist', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household() }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.scheduleNext('ev-never-logged', 5)
+
+    expect(eventsStore.events).toHaveLength(0)
+  })
+
+  it('is a no-op when the referenced complete has already been undone', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    clock = new Date(NOW.getTime() + 1000)
+    eventsStore.undo(original.id)
+
+    await eventsStore.scheduleNext(original.id, 5)
+
+    expect(eventsStore.events.some((e) => e.type === 'schedule')).toBe(false)
+  })
+})
+
+describe('eventsStore.unschedule (issue #68)', () => {
+  it('appends an unschedule event referencing the effective schedule and returns the task to listed', async () => {
+    const pots = task({ id: 'task-pots', points: 2, freq: 'weekly' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    await eventsStore.scheduleNext(original.id, 7)
+    const sched = eventsStore.events.find((e) => e.type === 'schedule')!
+    expect(eventsStore.schedule.get('task-pots')?.state).toBe('away')
+
+    await eventsStore.unschedule('task-pots')
+
+    const unsched = eventsStore.events.find((e) => e.type === 'unschedule')
+    expect(unsched).toBeDefined()
+    expect(ChoreEvent.safeParse(unsched).success).toBe(true)
+    expect(unsched?.refEventId).toBe(sched.id)
+    expect(eventsStore.schedule.get('task-pots')?.state).toBe('listed')
+  })
+
+  it('is a no-op when the task has no effective schedule', async () => {
+    const pots = task({ id: 'task-pots', points: 2 })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.unschedule('task-pots')
+
+    expect(eventsStore.events).toHaveLength(0)
+  })
+})
+
+describe('eventsStore.undo dropping a schedule (issue #68)', () => {
+  it('undoing the referenced complete within its window returns the task to listed', async () => {
+    const pots = task({ id: 'task-pots', points: 2, freq: 'weekly' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.complete('task-pots')
+    const original = eventsStore.events.find((e) => e.type === 'complete')!
+    await eventsStore.scheduleNext(original.id, 7)
+    expect(eventsStore.schedule.get('task-pots')?.state).toBe('away')
+
+    clock = new Date(NOW.getTime() + 1000)
+    eventsStore.undo(original.id)
+
+    expect(eventsStore.schedule.get('task-pots')?.state).toBe('listed')
   })
 })

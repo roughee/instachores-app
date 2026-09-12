@@ -225,6 +225,22 @@ describe('quick row and due dots', () => {
     expect(d.dueDots.floors).toBe(true)
     expect(d.dueDots.kitchen).toBe(false)
   })
+
+  it('excludes an away task’s completions from the quick row (issue #68)', () => {
+    const bottles = seed(SEED_IDS.bottles)
+    const events = [complete(bottles), complete(bottles), complete(seed(SEED_IDS.trash))]
+    const away = new Set([bottles.id])
+    const row = deriveState({ events, tasks, rewards, household: h, now: NOW, awayTaskIds: away }).quickRow
+    expect(row.some((t) => t.id === bottles.id)).toBe(false)
+  })
+
+  it('does not flag a category whose only overdue task is away (issue #68)', () => {
+    const vacuum = seed(SEED_IDS.vacuumAll)
+    const events = [complete(vacuum, { at: at('2026-08-20T10:00:00.000Z') })]
+    const away = new Set([vacuum.id])
+    const d = deriveState({ events, tasks, rewards, household: h, now: NOW, awayTaskIds: away })
+    expect(d.dueDots.floors).toBe(false)
+  })
 })
 
 describe('seed data', () => {

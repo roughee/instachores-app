@@ -7,6 +7,8 @@ import { Outbox } from './data/outbox'
 import { createDemoRepo } from './data/memoryRepo'
 import { SheetsRepo } from './data/sheetsRepo'
 import { Snapshot } from './data/snapshot'
+import { SEED_IDS } from './domain/seed'
+import { DAY_MS } from './domain/time'
 import type { SetupLink as SetupLinkT } from './schemas'
 import { configureSession, useSessionStore } from './stores/session'
 import type { SheetsRepoLike } from './stores/session'
@@ -58,6 +60,14 @@ app.mount('#app')
  * Issue #16 adds the router guard for a missing session; absent `?demo=1`
  * this only resumes a session that already exists, so a refresh does not
  * drop back to Welcome.
+ *
+ * `?demoSchedule=1` (issue #68) additionally puts three Schedule-tab tasks
+ * through "Next time?" for deterministic Schedule screenshots: Clean
+ * bathroom and Vacuum whole home get a fresh completion followed by a 3-day
+ * and a 7-day schedule (both land `away`); Wet-mop floors is completed 5
+ * days ago (through `complete`'s own `opts.at` backdating, same path as a
+ * real backdated log) with a 5-day schedule, so its due day is today. Dev
+ * only, like the flags above.
  */
 async function boot(): Promise<void> {
   const params = new URLSearchParams(window.location.search)
@@ -70,6 +80,17 @@ async function boot(): Promise<void> {
   if (logsWanted > 0) {
     const eventsStore = useEventsStore()
     for (const t of eventsStore.derived.quickRow.slice(0, logsWanted)) await eventsStore.complete(t.id)
+  }
+  if (params.get('demoSchedule') === '1') {
+    const eventsStore = useEventsStore()
+    const scheduleAfterCompleting = async (taskId: string, days: number, opts: { at?: Date } = {}) => {
+      await eventsStore.complete(taskId, opts)
+      const completeEventId = eventsStore.recentlyLogged?.eventId
+      if (completeEventId) await eventsStore.scheduleNext(completeEventId, days)
+    }
+    await scheduleAfterCompleting(SEED_IDS.cleanBathroom, 3)
+    await scheduleAfterCompleting(SEED_IDS.vacuumAll, 7)
+    await scheduleAfterCompleting(SEED_IDS.mop, 5, { at: new Date(Date.now() - 5 * DAY_MS) })
   }
   if (params.get('forceOffline') === '1') {
     useSyncStore().$patch({ online: false, outboxCount: Number(params.get('demoOutbox') ?? '3') })

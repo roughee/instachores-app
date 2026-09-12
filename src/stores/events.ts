@@ -15,6 +15,8 @@ import { detectCombos } from '@/domain/combos'
 import { deriveState, rollupForWeek } from '@/domain/derive'
 import type { Derived, WeekRollup } from '@/domain/derive'
 import { liveEvents } from '@/domain/events'
+import { deriveSchedule, dueDayFor } from '@/domain/schedule'
+import type { TaskSchedule } from '@/domain/schedule'
 import { buildToday } from '@/domain/today'
 import type { TodayRow, TodayTotals } from '@/domain/today'
 import { DAY_MS, dayKey, localMidnight, shiftDay, startOfMonth, startOfWeek } from '@/domain/time'
@@ -122,17 +124,37 @@ export const useEventsStore = defineStore('events', () => {
     weekOffset.value = 0
   }
 
-  /** The single source of truth for every number on screen (Architecture.md §2): the domain's output, not re-derived here. */
+  /** The Schedule tab's state per task (Plan §5.5, issue #64/#68): empty
+   * before a household is bound, same guard as `today`. */
+  const schedule = computed<Map<string, TaskSchedule>>(() => {
+    const householdStore = useHouseholdStore()
+    const catalogStore = useCatalogStore()
+    if (!householdStore.household) return new Map()
+    return deriveSchedule({
+      events: events.value,
+      tasks: catalogStore.tasks,
+      household: householdStore.household,
+      now: clockNow.value,
+    })
+  })
+
+  /** The single source of truth for every number on screen (Architecture.md §2): the domain's output, not re-derived here.
+   * `awayTaskIds` comes from `schedule` above (issue #68) so a folded task's
+   * quick row entry and due dot disappear without `deriveState` reading
+   * anything but its own explicit input. */
   const derived = computed<Derived>(() => {
     const householdStore = useHouseholdStore()
     const catalogStore = useCatalogStore()
     if (!householdStore.household) return emptyDerived()
+    const awayTaskIds = new Set<string>()
+    for (const s of schedule.value.values()) if (s.state === 'away') awayTaskIds.add(s.taskId)
     return deriveState({
       events: events.value,
       tasks: catalogStore.tasks,
       rewards: catalogStore.rewards,
       household: householdStore.household,
       now: clockNow.value,
+      awayTaskIds,
     })
   })
 
@@ -350,10 +372,86 @@ export const useEventsStore = defineStore('events', () => {
     return { ok: true }
   }
 
+  /**
+   * "Next time?" (Plan §5.5, issue #68): builds a `schedule` event for
+   * `completeEventId`'s task, due `days` household-local days after that
+   * complete's own day, applies it locally first, then appends through the
+   * repo -- the same optimistic order as `complete`. A no-op, without
+   * throwing, when `completeEventId` names no live complete (never logged,
+   * already undone, or from a different household): there is nothing to
+   * schedule off of.
+   */
+  async function scheduleNext(completeEventId: string, days: number): Promise<void> {
+    if (!boundRepo || !boundHouseholdId) throw new Error('events.scheduleNext: no household connected')
+    const householdStore = useHouseholdStore()
+    if (!householdStore.household) throw new Error('events.scheduleNext: household not loaded')
+    const actorUid = householdStore.currentMember?.uid
+    if (!actorUid) throw new Error('events.scheduleNext: no current member to credit')
+
+    const complete = liveEvents(events.value).find(
+      (e): e is EventOf<'complete'> => e.type === 'complete' && e.id === completeEventId,
+    )
+    if (!complete) return
+
+    const sessionOpts = getSessionOptions()
+    const at = sessionOpts.now()
+    const id = sessionOpts.ids()
+    const dueAt = dueDayFor(complete.at, days, householdStore.household.tz)
+    const ev = ChoreEvent.parse({
+      v: 1,
+      id,
+      type: 'schedule',
+      actorUid,
+      at,
+      loggedAt: at,
+      taskId: complete.taskId,
+      refEventId: completeEventId,
+      dueAt,
+      days,
+    }) as EventOf<'schedule'>
+
+    applyLocal(ev)
+    await boundRepo.appendEvent(boundHouseholdId, ev)
+  }
+
+  /**
+   * "Bring back early" (Plan §5.5, issue #68): appends an `unschedule`
+   * referencing `taskId`'s current effective `schedule` event (from
+   * `schedule` above, so it agrees with what the Schedule tab shows). A
+   * no-op when the task has no effective schedule right now.
+   */
+  async function unschedule(taskId: string): Promise<void> {
+    if (!boundRepo || !boundHouseholdId) throw new Error('events.unschedule: no household connected')
+    const householdStore = useHouseholdStore()
+    if (!householdStore.household) throw new Error('events.unschedule: household not loaded')
+    const actorUid = householdStore.currentMember?.uid
+    if (!actorUid) throw new Error('events.unschedule: no current member to credit')
+
+    const scheduleEventId = schedule.value.get(taskId)?.scheduleEventId
+    if (!scheduleEventId) return
+
+    const sessionOpts = getSessionOptions()
+    const at = sessionOpts.now()
+    const id = sessionOpts.ids()
+    const ev = ChoreEvent.parse({
+      v: 1,
+      id,
+      type: 'unschedule',
+      actorUid,
+      at,
+      loggedAt: at,
+      refEventId: scheduleEventId,
+    }) as EventOf<'unschedule'>
+
+    applyLocal(ev)
+    await boundRepo.appendEvent(boundHouseholdId, ev)
+  }
+
   return {
     events,
     recentlyLogged,
     derived,
+    schedule,
     youToday,
     doneTodayByTask,
     todayRows,
@@ -365,6 +463,8 @@ export const useEventsStore = defineStore('events', () => {
     complete,
     completeMany,
     undo,
+    scheduleNext,
+    unschedule,
     prevWeek,
     nextWeek,
   }
