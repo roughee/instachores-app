@@ -112,8 +112,9 @@ async function onQuickComplete(taskId: string): Promise<void> {
 
 function onSheetSchedule(days: number): void {
   const completeEventId = nextTimeSheet.payload.value?.completeEventId
+  const taskId = nextTimeSheet.payload.value?.task.id
   nextTimeSheet.close()
-  if (completeEventId) void eventsStore.scheduleNext(completeEventId, days)
+  if (completeEventId) void eventsStore.scheduleNext(completeEventId, days, taskId)
   flushPendingToast()
 }
 

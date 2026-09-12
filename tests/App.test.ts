@@ -15,18 +15,19 @@ import { useCelebration } from '@/composables/useCelebration'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
 
-async function mountApp() {
+async function mountApp(path = '/log') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: { template: '<div />' } },
       { path: '/log', component: { template: '<div />' } },
       { path: '/today', component: { template: '<div />' } },
+      { path: '/schedule', component: { template: '<div />' } },
       { path: '/overview', component: { template: '<div />' } },
       { path: '/rewards', component: { template: '<div />' } },
     ],
   })
-  await router.push('/log')
+  await router.push(path)
   await router.isReady()
   return mount(App, { global: { plugins: [router] } })
 }
@@ -35,6 +36,35 @@ beforeEach(() => {
   setActivePinia(createPinia())
   window.history.replaceState({}, '', '/')
   useCelebration().clear()
+})
+
+/**
+ * The bottom tab bar (issue #71, Plan §5.5): Log, Today, the FAB, Schedule,
+ * Overview -- Rewards moved into the Overview header in Phase 2 (issue #64)
+ * and is no longer one of the five bar items, though `#/rewards` itself
+ * stays routable (App.vue's `isActive` never gets tested against it here,
+ * that is `router.test.ts`'s job).
+ */
+describe('App tab bar', () => {
+  it('shows exactly Log, Today, Schedule and Overview as tabs, in that order', async () => {
+    const wrapper = await mountApp()
+    const labels = wrapper.findAll('.app-shell__tab').map((t) => t.text())
+
+    expect(labels).toEqual(['Log', 'Today', 'Schedule', 'Overview'])
+  })
+
+  it('never shows Rewards as a tab', async () => {
+    const wrapper = await mountApp()
+
+    expect(wrapper.text()).not.toContain('Rewards')
+  })
+
+  it('marks Schedule active on #/schedule', async () => {
+    const wrapper = await mountApp('/schedule')
+    const scheduleTab = wrapper.findAll('.app-shell__tab').find((t) => t.text() === 'Schedule')!
+
+    expect(scheduleTab.classes()).toContain('app-shell__tab--active')
+  })
 })
 
 /**

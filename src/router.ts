@@ -16,6 +16,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/log', component: () => import('@/screens/LogScreen.vue') },
   { path: '/log/:category', component: () => import('@/screens/CategoryScreen.vue') },
   { path: '/today', component: () => import('@/screens/TodayScreen.vue') },
+  { path: '/schedule', component: () => import('@/screens/ScheduleScreen.vue') },
   { path: '/overview', component: () => import('@/screens/OverviewScreen.vue') },
   { path: '/rewards', component: () => import('@/screens/RewardsScreen.vue') },
   { path: '/kid', component: () => import('@/screens/KidScreen.vue') },

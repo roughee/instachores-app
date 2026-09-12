@@ -13,7 +13,7 @@
  */
 import { computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
-import { PhChartBar, PhClockCounterClockwise, PhCookingPot, PhGift, PhListChecks } from '@phosphor-icons/vue'
+import { PhCalendarCheck, PhChartBar, PhClockCounterClockwise, PhCookingPot, PhListChecks } from '@phosphor-icons/vue'
 import Celebration from '@/components/Celebration.vue'
 import { categoryColor } from '@/components/categoryIcons'
 import UpdateToast from '@/components/UpdateToast.vue'
@@ -41,11 +41,14 @@ interface Tab {
   icon: typeof PhListChecks
 }
 
+/** Rewards moved into the Overview header in Phase 2 (issue #64): it is no
+ * longer one of the five bar items, though `#/rewards` itself stays
+ * routable (`router.ts`). Schedule (issue #71) takes its place, after the FAB. */
 const tabs: Tab[] = [
   { to: '/log', label: 'Log', icon: PhListChecks },
   { to: '/today', label: 'Today', icon: PhClockCounterClockwise },
+  { to: '/schedule', label: 'Schedule', icon: PhCalendarCheck },
   { to: '/overview', label: 'Overview', icon: PhChartBar },
-  { to: '/rewards', label: 'Rewards', icon: PhGift },
 ]
 const leftTabs = tabs.slice(0, 2)
 const rightTabs = tabs.slice(2)
