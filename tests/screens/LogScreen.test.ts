@@ -87,7 +87,7 @@ describe('LogScreen', () => {
     expect(wrapper.text()).toContain('Laundry')
   })
 
-  it('tapping a quick task logs it, updates the bar in the same frame, and shows a toast with Undo', async () => {
+  it('tapping a quick task logs it, updates the bar in the same frame, and opens the Next time sheet', async () => {
     const repo = new MemoryRepo([{ id: HID, household: household(), tasks: quickDefaultTasks() }])
     const { eventsStore } = bindAll(repo, () => clock)
     useSessionStore().memberUid = ANA
@@ -98,12 +98,29 @@ describe('LogScreen', () => {
 
     expect(wrapper.text()).toContain('2 / 250')
     expect(eventsStore.events.filter((e) => e.type === 'complete')).toHaveLength(1)
+    expect(triggerSpy).toHaveBeenCalledTimes(1)
+    expect(triggerSpy).toHaveBeenCalledWith('var(--cat-kitchen)')
 
+    // No toast until the sheet closes -- Undo's window must still be open then.
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Pots logged')
+  })
+
+  it('shows the toast with Undo once the Next time sheet closes (Not now)', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: quickDefaultTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter()
+
+    const wrapper = mount(LogScreen, { global: { plugins: [router] } })
+    await wrapper.get('[data-test="task-button"]').trigger('click')
+    await wrapper.get('[data-test="next-time-not-now"]').trigger('click')
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     const status = wrapper.get('[role="status"]')
     expect(status.text()).toContain('Pots logged')
     expect(status.text()).toContain('Undo')
-    expect(triggerSpy).toHaveBeenCalledTimes(1)
-    expect(triggerSpy).toHaveBeenCalledWith('var(--cat-kitchen)')
 
     await status.get('button').trigger('click')
 
@@ -112,7 +129,24 @@ describe('LogScreen', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
   })
 
-  it('a second tap replaces the toast instead of queueing it', async () => {
+  it('choosing Schedule calls scheduleNext with the completion id and the selected days, then shows the toast', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: quickDefaultTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter()
+    const scheduleNextSpy = vi.spyOn(eventsStore, 'scheduleNext')
+
+    const wrapper = mount(LogScreen, { global: { plugins: [router] } })
+    await wrapper.get('[data-test="task-button"]').trigger('click')
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
+
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 1)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toContain('Pots logged')
+  })
+
+  it('a second completion replaces the toast instead of queueing it', async () => {
     const repo = new MemoryRepo([{ id: HID, household: household(), tasks: quickDefaultTasks() }])
     bindAll(repo, () => clock)
     useSessionStore().memberUid = ANA
@@ -121,7 +155,9 @@ describe('LogScreen', () => {
     const wrapper = mount(LogScreen, { global: { plugins: [router] } })
     const buttons = wrapper.findAll('[data-test="task-button"]')
     await buttons[0]!.trigger('click')
+    await wrapper.get('[data-test="next-time-not-now"]').trigger('click')
     await buttons[1]!.trigger('click')
+    await wrapper.get('[data-test="next-time-not-now"]').trigger('click')
 
     expect(wrapper.findAll('[role="status"]')).toHaveLength(1)
     expect(wrapper.get('[role="status"]').text()).toContain('Clean kitchen counters')

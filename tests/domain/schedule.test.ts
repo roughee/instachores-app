@@ -175,3 +175,61 @@ describe('deriveSchedule', () => {
     expect(input(dueAt).get(t.id)!.state).toBe('due')
   })
 })
+
+describe('deriveSchedule for group parents (#69 review)', () => {
+  const hh = household()
+  const parent = task({ id: 'grp', name: 'Clean bathroom', points: 0, comboBonus: 2, freq: 'weekly' })
+  const toilet = task({ id: 'toilet', points: 4, parentId: 'grp', freq: 'weekly' })
+  const sink = task({ id: 'sink', points: 2, parentId: 'grp', freq: 'weekly' })
+  const tasks = [parent, toilet, sink]
+
+  it('a schedule referencing the last sub-item complete of a Do all puts the parent away', () => {
+    const c1 = complete(toilet)
+    const c2 = complete(sink)
+    const bonus = event('bonus', { forUid: ANA, points: 2, combo: parent.id, day: '2026-09-08' })
+    const sched = event('schedule', { taskId: parent.id, refEventId: c2.id, dueAt: dueDayFor(c2.at, 7, TZ), days: 7 })
+    const s = deriveSchedule({ events: [c1, c2, bonus, sched], tasks, household: hh, now: NOW }).get(parent.id)!
+    expect(s.state).toBe('away')
+    expect(s.scheduleEventId).toBe(sched.id)
+  })
+
+  it('a parent with a combo bonus takes its last-done from the latest live bonus', () => {
+    const at = new Date('2026-09-04T18:00:00.000Z')
+    const c1 = complete(toilet, { at, loggedAt: at, forUid: BEN })
+    const c2 = complete(sink, { at, loggedAt: at, forUid: BEN })
+    const bonus = event('bonus', { forUid: BEN, points: 2, combo: parent.id, day: '2026-09-04', at, loggedAt: at })
+    const s = deriveSchedule({ events: [c1, c2, bonus], tasks, household: hh, now: NOW }).get(parent.id)!
+    expect(s.lastDoneAt).toEqual(at)
+    expect(s.lastDoneBy).toBe(BEN)
+    expect(s.state).toBe('listed')
+  })
+
+  it('a later Do all supersedes the parent schedule', () => {
+    const at1 = new Date('2026-09-01T18:00:00.000Z')
+    const c1 = complete(sink, { at: at1, loggedAt: at1 })
+    const b1 = event('bonus', { forUid: ANA, points: 2, combo: parent.id, day: '2026-09-01', at: at1, loggedAt: at1 })
+    const sched = event('schedule', {
+      taskId: parent.id,
+      refEventId: c1.id,
+      dueAt: dueDayFor(at1, 14, TZ),
+      days: 14,
+      at: at1,
+    })
+    const at2 = new Date('2026-09-05T18:00:00.000Z')
+    const c2 = complete(sink, { at: at2, loggedAt: at2 })
+    const b2 = event('bonus', { forUid: ANA, points: 2, combo: parent.id, day: '2026-09-05', at: at2, loggedAt: at2 })
+    const s = deriveSchedule({ events: [c1, b1, sched, c2, b2], tasks, household: hh, now: NOW }).get(parent.id)!
+    expect(s.state).toBe('listed')
+    expect(s.lastDoneAt).toEqual(at2)
+  })
+
+  it('a parent without a combo bonus takes its last-done from its latest sub-item complete', () => {
+    const plain = task({ id: 'wash', name: 'Hand-wash dishes', points: 0, freq: 'daily' })
+    const pots = task({ id: 'pots', points: 2, parentId: 'wash', freq: 'daily' })
+    const at = new Date('2026-09-06T18:00:00.000Z')
+    const c = complete(pots, { at, loggedAt: at, forUid: BEN })
+    const s = deriveSchedule({ events: [c], tasks: [plain, pots], household: hh, now: NOW }).get(plain.id)!
+    expect(s.lastDoneAt).toEqual(at)
+    expect(s.lastDoneBy).toBe(BEN)
+  })
+})

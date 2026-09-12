@@ -88,7 +88,16 @@ export function deriveSchedule(input: DeriveScheduleInput): Map<string, TaskSche
   const live = liveEvents(events)
 
   const unscheduledIds = new Set<string>()
-  for (const e of live) if (e.type === 'unschedule') unscheduledIds.add(e.refEventId)
+  const liveCompleteIds = new Set<string>()
+  for (const e of live) {
+    if (e.type === 'unschedule') unscheduledIds.add(e.refEventId)
+    if (e.type === 'complete') liveCompleteIds.add(e.id)
+  }
+  const childrenOf = new Map<string, Task[]>()
+  for (const t of tasks) {
+    if (t.parentId === undefined) continue
+    childrenOf.set(t.parentId, [...(childrenOf.get(t.parentId) ?? []), t])
+  }
 
   const out = new Map<string, TaskSchedule>()
   for (const t of tasks) {
@@ -97,29 +106,37 @@ export function deriveSchedule(input: DeriveScheduleInput): Map<string, TaskSche
       continue
     }
 
-    const taskCompletes = live.filter((e): e is EventOf<'complete'> => e.type === 'complete' && e.taskId === t.id)
-    let lastDoneAt: Date | undefined
-    let lastDoneBy: string | undefined
-    for (const c of taskCompletes) {
-      if (!lastDoneAt || c.at.getTime() > lastDoneAt.getTime()) {
-        lastDoneAt = c.at
-        lastDoneBy = c.forUid
-      }
+    // "Done" marks for this task: its own completes, plus, for a group parent,
+    // the bonus each "Do all" appends (or, without a combo bonus, any sub-item
+    // complete). A schedule for the parent references the last sub-item's
+    // complete, so the reference check runs against every live complete.
+    const marks: { at: Date; by: string }[] = []
+    const children = childrenOf.get(t.id) ?? []
+    const childIds = new Set(children.map((c) => c.id))
+    for (const e of live) {
+      if (e.type === 'complete' && e.taskId === t.id) marks.push({ at: e.at, by: e.forUid })
+      else if (children.length > 0 && t.comboBonus !== undefined && e.type === 'bonus' && e.combo === t.id)
+        marks.push({ at: e.at, by: e.forUid })
+      else if (children.length > 0 && t.comboBonus === undefined && e.type === 'complete' && childIds.has(e.taskId))
+        marks.push({ at: e.at, by: e.forUid })
     }
-    const liveCompleteIds = new Set(taskCompletes.map((c) => c.id))
+    let last: { at: Date; by: string } | undefined
+    for (const m of marks) if (!last || m.at.getTime() > last.at.getTime()) last = m
 
     let effective: EventOf<'schedule'> | undefined
     for (const e of live) {
       if (e.type !== 'schedule' || e.taskId !== t.id) continue
       if (!liveCompleteIds.has(e.refEventId)) continue
       if (unscheduledIds.has(e.id)) continue
-      if (taskCompletes.some((c) => c.at.getTime() > e.at.getTime())) continue
+      if (marks.some((m) => m.at.getTime() > e.at.getTime())) continue
       if (!effective || e.at.getTime() > effective.at.getTime()) effective = e
     }
 
     const schedule: TaskSchedule = { taskId: t.id, state: 'listed' }
-    if (lastDoneAt) schedule.lastDoneAt = lastDoneAt
-    if (lastDoneBy) schedule.lastDoneBy = lastDoneBy
+    if (last) {
+      schedule.lastDoneAt = last.at
+      schedule.lastDoneBy = last.by
+    }
     if (effective) {
       schedule.dueAt = effective.dueAt
       schedule.days = effective.days

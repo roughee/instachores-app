@@ -8,16 +8,25 @@
  * `eventsStore.complete`/`completeMany` apply locally before their repo
  * writes resolve, so the list and its avatar dots update in the same frame.
  *
+ * The "Next time?" sheet (issue #69) opens after a plain `TaskButton`
+ * complete and after a group's "Do all" (with the parent task and the
+ * summed points), but never after a `TaskGroup` sub-item chip tap -- that
+ * still just logs and toasts, same as before. The toast is queued behind
+ * an open sheet so its 4s Undo window starts on close, not on completion.
+ *
  * `?demoComplete=<taskId>,<taskId>` (dev-only query flag, gated by
  * `usePwa.ts`'s `hasFlag`/`flagValue`, same pattern as `forceUpdateToast`):
  * on mount, completes each listed task id once, in order -- a repeated id
  * logs that task twice, which is how `scripts/screenshots.mjs` renders a
- * deterministic x2 badge without scripting real taps.
+ * deterministic x2 badge without scripting real taps. `?demoSheet=<taskId>`
+ * (issue #69) similarly completes one task through the normal `onComplete`
+ * path so its Next time sheet opens, for a deterministic sheet screenshot.
  */
 import { computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { PhTag } from '@phosphor-icons/vue'
 import EmptyState from '@/components/EmptyState.vue'
+import NextTimeSheet from '@/components/NextTimeSheet.vue'
 import TaskButton from '@/components/TaskButton.vue'
 import TaskGroup from '@/components/TaskGroup.vue'
 import Toast from '@/components/Toast.vue'
@@ -25,7 +34,9 @@ import { categoryColor, categoryIcon, categoryLabel } from '@/components/categor
 import { useCelebration } from '@/composables/useCelebration'
 import { flagValue, hasFlag } from '@/composables/usePwa'
 import { useHaptic } from '@/composables/useHaptic'
+import { useNextTimeSheet } from '@/composables/useNextTimeSheet'
 import { useToast } from '@/composables/useToast'
+import type { ShowToastOptions } from '@/composables/useToast'
 import { Category } from '@/schemas'
 import type { Member, Task } from '@/schemas'
 import { useCatalogStore } from '@/stores/catalog'
@@ -39,6 +50,7 @@ const householdStore = useHouseholdStore()
 const { tick } = useHaptic()
 const { toast, show, dismiss } = useToast()
 const { trigger: triggerCelebration } = useCelebration()
+const nextTimeSheet = useNextTimeSheet()
 
 const category = computed(() => {
   const raw = route.params.category
@@ -93,7 +105,68 @@ function celebrationColor(): string {
   return categoryColor(category.value.success ? category.value.data : undefined)
 }
 
+/** Toast queued behind an open Next time sheet (issue #69): `show()` is
+ * deferred so `TOAST_DURATION_MS` starts counting down from the sheet's
+ * close, not from the completion itself. */
+let pendingToast: ShowToastOptions | undefined
+
+function flushPendingToast(): void {
+  if (!pendingToast) return
+  show(pendingToast)
+  pendingToast = undefined
+}
+
+/** Opens the Next time sheet for `task`'s just-created `complete` event
+ * (`eventId`), if the household is loaded and the event is still live;
+ * `nextTimeSheet.open` itself skips kid tasks. `points`, when given,
+ * overrides the event's own points -- a group "Do all"'s summed total
+ * rather than the parent's own (usually 0). Returns whether it opened, so
+ * the caller knows whether to defer its toast. */
+function openSheetFor(
+  task: Task | undefined,
+  eventId: string | undefined,
+  lastDoneAt: Date | undefined,
+  points?: number,
+): boolean {
+  const household = householdStore.household
+  if (!task || !eventId || !household) return false
+  const event = eventsStore.events.find((e) => e.id === eventId)
+  if (!event || event.type !== 'complete') return false
+  nextTimeSheet.open({
+    task,
+    completeEventId: eventId,
+    points: points ?? event.points,
+    memberName: householdStore.currentMember?.name ?? '',
+    lastDoneAt,
+    completedAt: event.at,
+    tz: household.tz,
+    categoryLabel: categoryLabel(category.value.success ? category.value.data : task.category),
+  })
+  return nextTimeSheet.payload.value !== undefined
+}
+
+function toastOptionsFor(message: string, eventId: string | undefined): ShowToastOptions {
+  return { message, action: eventId ? { label: 'Undo', onAction: () => eventsStore.undo(eventId) } : undefined }
+}
+
+/** A plain `TaskButton` complete (DESIGN.md §5 NextTimeSheet): opens the
+ * sheet, unlike a `TaskGroup` sub-item tap (`onChildComplete` below). */
 async function onComplete(taskId: string): Promise<void> {
+  const task = catalogStore.byId.get(taskId)
+  tick()
+  const lastDoneAt = task ? eventsStore.schedule.get(taskId)?.lastDoneAt : undefined
+  const pending = eventsStore.complete(taskId)
+  triggerCelebration(celebrationColor())
+  const eventId = eventsStore.recentlyLogged?.eventId
+  const toastOptions = toastOptionsFor(task ? `${task.name} logged` : 'Task logged', eventId)
+  if (openSheetFor(task, eventId, lastDoneAt)) pendingToast = toastOptions
+  else show(toastOptions)
+  await pending
+}
+
+/** A `TaskGroup` sub-item chip tap: logs and toasts, never opens the sheet
+ * (Plan §5.5: "Do all" opens it for the parent, a lone chip does not). */
+async function onChildComplete(taskId: string): Promise<void> {
   const task = catalogStore.byId.get(taskId)
   tick()
   const pending = eventsStore.complete(taskId)
@@ -102,12 +175,38 @@ async function onComplete(taskId: string): Promise<void> {
   await pending
 }
 
-async function onCompleteAll(taskIds: string[], groupName: string): Promise<void> {
+/** "Do all" (DESIGN.md §5): opens the sheet for the parent, with the sum
+ * of every sub-item's points plus the parent's combo bonus, if any -- not
+ * the parent's own points (usually 0). Computed the same way `TaskGroup`'s
+ * own "+N" hint is (`taskIds` are already its active children), rather
+ * than read back off `eventsStore.events` right after `completeMany`:
+ * `complete`'s own repo write re-notifies this store from the repo's
+ * (not-yet-bonused) list before the bonus's own write lands, so a
+ * synchronous read straight after `completeMany` can transiently miss it. */
+async function onCompleteAll(taskIds: string[], parent: Task): Promise<void> {
   tick()
+  const lastDoneAt = eventsStore.schedule.get(parent.id)?.lastDoneAt
+  const loggedPoints =
+    taskIds.reduce((sum, id) => sum + (catalogStore.byId.get(id)?.points ?? 0), 0) + (parent.comboBonus ?? 0)
   const pending = eventsStore.completeMany(taskIds)
   triggerCelebration(celebrationColor())
-  showLoggedToast(`${groupName} logged`)
+  const eventId = eventsStore.recentlyLogged?.eventId
+  const toastOptions = toastOptionsFor(`${parent.name} logged`, eventId)
+  if (openSheetFor(parent, eventId, lastDoneAt, loggedPoints)) pendingToast = toastOptions
+  else show(toastOptions)
   await pending
+}
+
+function onSheetSchedule(days: number): void {
+  const completeEventId = nextTimeSheet.payload.value?.completeEventId
+  nextTimeSheet.close()
+  if (completeEventId) void eventsStore.scheduleNext(completeEventId, days)
+  flushPendingToast()
+}
+
+function onSheetDismiss(): void {
+  nextTimeSheet.close()
+  flushPendingToast()
 }
 
 function onToastAction(): void {
@@ -116,13 +215,27 @@ function onToastAction(): void {
 }
 
 onMounted(async () => {
-  if (!hasFlag('demoComplete')) return
-  const raw = flagValue('demoComplete') ?? ''
-  const taskIds = raw
-    .split(',')
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0)
-  for (const taskId of taskIds) await eventsStore.complete(taskId)
+  if (hasFlag('demoComplete')) {
+    const raw = flagValue('demoComplete') ?? ''
+    const taskIds = raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0)
+    for (const taskId of taskIds) await eventsStore.complete(taskId)
+  }
+  const demoSheetTaskId = flagValue('demoSheet')
+  if (demoSheetTaskId) {
+    // A group parent goes through "Do all", the same path a real tap takes,
+    // so the sheet shows the summed points rather than the parent's own 0.
+    const parent = catalogStore.byId.get(demoSheetTaskId)
+    const children = catalogStore.tasks.filter((t) => t.parentId === demoSheetTaskId && !t.archived)
+    if (parent && children.length > 0) {
+      await onCompleteAll(
+        children.map((c) => c.id),
+        parent,
+      )
+    } else await onComplete(demoSheetTaskId)
+  }
 })
 </script>
 
@@ -149,8 +262,8 @@ onMounted(async () => {
             :parent="item.parent"
             :children="item.children"
             :done-today-by-task="eventsStore.doneTodayByTask"
-            @complete="onComplete"
-            @complete-all="(taskIds) => onCompleteAll(taskIds, item.parent.name)"
+            @complete="onChildComplete"
+            @complete-all="(taskIds) => onCompleteAll(taskIds, item.parent)"
           />
         </template>
       </div>
@@ -171,6 +284,13 @@ onMounted(async () => {
       :expires-at="toast.expiresAt"
       @action="onToastAction"
       @expire="dismiss"
+    />
+
+    <NextTimeSheet
+      v-if="nextTimeSheet.payload.value"
+      v-bind="nextTimeSheet.payload.value"
+      @schedule="onSheetSchedule"
+      @dismiss="onSheetDismiss"
     />
   </div>
 </template>

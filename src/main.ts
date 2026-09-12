@@ -68,6 +68,12 @@ app.mount('#app')
  * days ago (through `complete`'s own `opts.at` backdating, same path as a
  * real backdated log) with a 5-day schedule, so its due day is today. Dev
  * only, like the flags above.
+ *
+ * `?demoSheet=<taskId>` (issue #69, `CategoryScreen.vue`, read with
+ * `flagValue`): on mount, completes that one task through the same
+ * `onComplete` path a real `TaskButton` tap uses, so its `NextTimeSheet`
+ * opens for a deterministic screenshot -- `scripts/screenshots.mjs` pairs
+ * it with `#/log/<category>` for the task. Dev only, like the flags above.
  */
 async function boot(): Promise<void> {
   const params = new URLSearchParams(window.location.search)
