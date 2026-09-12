@@ -5,7 +5,8 @@
  * the script's `cmd*` functions and `main()`, which are not exercised here —
  * see docs/Setup.md for the manual procedure that runs them for real.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { ActionResponse } from '../../scripts/household.ts'
 import {
   buildSeedPayload,
   buildSetupLinkUrl,
@@ -14,14 +15,17 @@ import {
   evaluateCheckResults,
   flagValue,
   flagValues,
+  formatAppendDryRun,
   formatMembersTable,
   formatSeedDryRun,
   generateSecret,
   hasFlag,
+  missingSeedRows,
   normalizeAppUrl,
   parseArgv,
   parseMemberSpec,
   resolveSecret,
+  runSeedAppend,
 } from '../../scripts/household.ts'
 import { SEED_IDS } from '../../src/domain/seed.ts'
 
@@ -316,5 +320,220 @@ describe('describeSeedRefusal', () => {
     const message = describeSeedRefusal({ code: 'invalid' })
 
     expect(message).toContain('already has rows')
+  })
+
+  it('points at --append as the way to add the missing rows instead', () => {
+    const message = describeSeedRefusal({ code: 'invalid' })
+
+    expect(message).toContain('--append')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// missingSeedRows / formatAppendDryRun / runSeedAppend (issue #83)
+// ---------------------------------------------------------------------------
+
+const NOW = new Date('2026-09-08T00:00:00.000Z')
+
+function bootstrapOf(taskIds: string[], rewardIds: string[]): { tasks: unknown[]; rewards: unknown[] } {
+  return {
+    tasks: taskIds.map((id) => ({ id })),
+    rewards: rewardIds.map((id) => ({ id })),
+  }
+}
+
+describe('missingSeedRows', () => {
+  it('returns every seed row when the sheet is empty', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+
+    const missing = missingSeedRows(bootstrapOf([], []), payload)
+
+    expect(missing.tasks).toEqual(payload.tasks)
+    expect(missing.rewards).toEqual(payload.rewards)
+  })
+
+  it('returns nothing when the sheet already has every seed row', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+
+    const missing = missingSeedRows(
+      bootstrapOf(
+        payload.tasks.map((t) => t.id),
+        payload.rewards.map((r) => r.id),
+      ),
+      payload,
+    )
+
+    expect(missing.tasks).toEqual([])
+    expect(missing.rewards).toEqual([])
+  })
+
+  it('returns exactly the missing rows, in seed order, for a partially seeded sheet', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const presentTaskIds = [payload.tasks[0]!.id, payload.tasks[2]!.id]
+    const presentRewardIds = [payload.rewards[1]!.id]
+
+    const missing = missingSeedRows(bootstrapOf(presentTaskIds, presentRewardIds), payload)
+
+    const expectedTasks = payload.tasks.filter((t) => !presentTaskIds.includes(t.id))
+    const expectedRewards = payload.rewards.filter((r) => !presentRewardIds.includes(r.id))
+    expect(missing.tasks).toEqual(expectedTasks)
+    expect(missing.tasks.map((t) => t.id)).not.toContain(payload.tasks[0]!.id)
+    expect(missing.tasks.map((t) => t.id)).not.toContain(payload.tasks[2]!.id)
+    expect(missing.rewards).toEqual(expectedRewards)
+  })
+
+  it('skips sheet rows without an id instead of treating them as present or throwing', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const bootstrap = { tasks: [{ name: 'no id here' }, {}], rewards: [{ points: 5 }] }
+
+    const missing = missingSeedRows(bootstrap, payload)
+
+    expect(missing.tasks).toEqual(payload.tasks)
+    expect(missing.rewards).toEqual(payload.rewards)
+  })
+
+  it('ignores sheet ids that are not in the seed payload', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+
+    const missing = missingSeedRows(bootstrapOf(['some-old-task-id'], ['some-old-reward-id']), payload)
+
+    expect(missing.tasks).toEqual(payload.tasks)
+    expect(missing.rewards).toEqual(payload.rewards)
+  })
+})
+
+describe('formatAppendDryRun', () => {
+  it('groups missing tasks by category, lists rewards, and reports the counts', () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const breakfast = payload.tasks.find((t) => t.id === SEED_IDS.makeBreakfast)!
+    const washCycle = payload.tasks.find((t) => t.id === SEED_IDS.washCycle)!
+    const reward = payload.rewards[0]!
+
+    const out = formatAppendDryRun({ tasks: [breakfast, washCycle], rewards: [reward] })
+
+    expect(out).toContain('kitchen:')
+    expect(out).toContain(`+ ${breakfast.name} (kitchen, ${breakfast.points} pts)`)
+    expect(out).toContain('laundry:')
+    expect(out).toContain(`+ ${washCycle.name} (laundry, ${washCycle.points} pts)`)
+    expect(out).toContain('rewards:')
+    expect(out).toContain(`+ ${reward.name} (${reward.cost} pts)`)
+    expect(out).toContain('2 missing tasks, 1 missing rewards')
+  })
+
+  it('reports zero counts and no group headers for nothing missing', () => {
+    const out = formatAppendDryRun({ tasks: [], rewards: [] })
+
+    expect(out).toContain('0 missing tasks, 0 missing rewards')
+    expect(out).not.toContain('rewards:')
+  })
+})
+
+describe('runSeedAppend', () => {
+  const url = 'https://example.invalid/exec'
+  const secret = 's3cr3t'
+
+  function fakePost(bootstrap: { tasks: unknown[]; rewards: unknown[] }, failOn?: string) {
+    return vi.fn(async (_url: string, _secret: string, action: string): Promise<ActionResponse> => {
+      if (action === 'bootstrap') return { ok: true, ...bootstrap }
+      if (action === failOn) return { ok: false, code: 'invalid', message: `bad row for ${action}` }
+      return { ok: true }
+    })
+  }
+
+  it('posts bootstrap, then one tasks.upsert/rewards.upsert per missing row, in seed order, with --yes', async () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const missingTasks = payload.tasks.slice(-2)
+    const missingRewards = payload.rewards.slice(-1)
+    const presentTaskIds = payload.tasks.slice(0, -2).map((t) => t.id)
+    const presentRewardIds = payload.rewards.slice(0, -1).map((r) => r.id)
+    const post = fakePost({
+      tasks: presentTaskIds.map((id) => ({ id })),
+      rewards: presentRewardIds.map((id) => ({ id })),
+    })
+    const logs: string[] = []
+
+    const code = await runSeedAppend(
+      url,
+      secret,
+      payload,
+      { dryRun: false, yes: true },
+      { post, confirm: () => Promise.reject(new Error('should not ask with --yes')), log: (l) => logs.push(l) },
+    )
+
+    expect(code).toBe(0)
+    expect(post).toHaveBeenNthCalledWith(1, url, secret, 'bootstrap')
+    missingTasks.forEach((task, i) => {
+      expect(post).toHaveBeenNthCalledWith(2 + i, url, secret, 'tasks.upsert', { task })
+    })
+    missingRewards.forEach((reward, i) => {
+      expect(post).toHaveBeenNthCalledWith(2 + missingTasks.length + i, url, secret, 'rewards.upsert', { reward })
+    })
+    expect(post).toHaveBeenCalledTimes(1 + missingTasks.length + missingRewards.length)
+    expect(logs.join('\n')).toContain(`+ ${missingTasks[0]!.name}`)
+  })
+
+  it('stops at the first failed upsert, reports it, and exits 1 without posting the rest', async () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const post = fakePost({ tasks: [], rewards: payload.rewards.map((r) => ({ id: r.id })) }, 'tasks.upsert')
+    const errors: string[] = []
+
+    const code = await runSeedAppend(
+      url,
+      secret,
+      payload,
+      { dryRun: false, yes: true },
+      { post, confirm: () => Promise.reject(new Error('should not ask with --yes')), error: (l) => errors.push(l) },
+    )
+
+    expect(code).toBe(1)
+    // bootstrap + exactly one failed tasks.upsert call, nothing after it
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(errors.join('\n')).toContain(payload.tasks[0]!.id)
+    expect(errors.join('\n')).toContain('invalid')
+  })
+
+  it('exits 0 with no upsert calls when nothing is missing', async () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const post = fakePost({
+      tasks: payload.tasks.map((t) => ({ id: t.id })),
+      rewards: payload.rewards.map((r) => ({ id: r.id })),
+    })
+    const logs: string[] = []
+
+    const code = await runSeedAppend(
+      url,
+      secret,
+      payload,
+      { dryRun: false, yes: false },
+      {
+        post,
+        confirm: () => Promise.reject(new Error('should not ask when nothing is missing')),
+        log: (l) => logs.push(l),
+      },
+    )
+
+    expect(code).toBe(0)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(logs.join('\n')).toContain('Nothing to add: the sheet already has every seed row.')
+  })
+
+  it('prints the dry-run report and exits 0 without posting any upsert', async () => {
+    const payload = buildSeedPayload(NOW, 'setup')
+    const post = fakePost({ tasks: [], rewards: [] })
+    const logs: string[] = []
+
+    const code = await runSeedAppend(
+      url,
+      secret,
+      payload,
+      { dryRun: true, yes: false },
+      { post, confirm: () => Promise.reject(new Error('should not ask on --dry-run')), log: (l) => logs.push(l) },
+    )
+
+    expect(code).toBe(0)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(logs.join('\n')).toContain(
+      `${payload.tasks.length} missing tasks, ${payload.rewards.length} missing rewards`,
+    )
   })
 })
