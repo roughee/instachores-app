@@ -7,6 +7,8 @@ import type { Category, Freq, Reward as RewardT, Task as TaskT } from '@/schemas
 
 export const SEED_IDS = {
   cookDinner: 'task-kitchen-cook-dinner',
+  makeBreakfast: 'task-kitchen-make-breakfast',
+  makeLunch: 'task-kitchen-make-lunch',
   handWash: 'task-kitchen-hand-wash',
   pots: 'task-kitchen-pots',
   pans: 'task-kitchen-pans',
@@ -59,6 +61,8 @@ export const SEED_IDS = {
   diaperBin: 'task-bathroom-diaper-bin',
   sanitaryBin: 'task-bathroom-sanitary-bin',
   bathKids: 'task-kids-bath',
+  babyFood: 'task-kids-baby-food',
+  babyFoodGear: 'task-kids-baby-food-gear',
   bedtime: 'task-kids-bedtime',
   nightWake: 'task-kids-night-wake',
   kidsClothes: 'task-kids-clothes',
@@ -97,6 +101,8 @@ type Row = [id: string, name: string, category: Category, points: number, freq: 
 
 const ROWS: Row[] = [
   [SEED_IDS.cookDinner, 'Cook dinner', 'kitchen', 6, 'daily'],
+  [SEED_IDS.makeBreakfast, 'Make breakfast', 'kitchen', 3, 'daily'],
+  [SEED_IDS.makeLunch, 'Make lunch', 'kitchen', 4, 'daily'],
   [SEED_IDS.handWash, 'Hand-wash dishes', 'kitchen', 0, 'daily'],
   [SEED_IDS.pots, 'Pots', 'kitchen', 2, 'daily', { parentId: SEED_IDS.handWash }],
   [SEED_IDS.pans, 'Pans / wok', 'kitchen', 2, 'daily', { parentId: SEED_IDS.handWash }],
@@ -156,6 +162,8 @@ const ROWS: Row[] = [
   [SEED_IDS.diaperBin, 'Empty diaper bin', 'bathroom', 2, 'weekly'],
   [SEED_IDS.sanitaryBin, 'Empty sanitary bin', 'bathroom', 2, 'weekly'],
   [SEED_IDS.bathKids, 'Bath the kids', 'kids', 4, 'daily'],
+  [SEED_IDS.babyFood, 'Make baby food', 'kids', 4, 'weekly', { intervalDays: 4 }],
+  [SEED_IDS.babyFoodGear, 'Wash baby food containers + gear', 'kids', 2, 'daily'],
   [SEED_IDS.bedtime, 'Bedtime routine', 'kids', 4, 'daily'],
   [SEED_IDS.nightWake, 'Night feed / wake-up', 'kids', 3, 'daily'],
   [SEED_IDS.kidsClothes, "Sort kids' clothes (outgrown, seasons)", 'kids', 5, 'monthly'],

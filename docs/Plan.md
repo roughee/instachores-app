@@ -64,6 +64,8 @@ Scale: 1 pt ≈ 5 minutes of tolerable work. Unpleasant or interrupt-heavy tasks
 | Task | Pts | Freq | Notes |
 |---|---|---|---|
 | Cook dinner | 6 | daily | Includes the mess it creates |
+| Make breakfast | 3 | daily | |
+| Make lunch | 4 | daily | |
 | **Hand-wash dishes** (group) | | daily | Anything that doesn't go in the dishwasher — tap what you actually did |
 | ↳ Pots | 2 | daily | |
 | ↳ Pans / wok | 2 | daily | Burnt-on = the worst one |
@@ -148,6 +150,8 @@ Group tasks in the app: a task can have `parentId`. The category screen shows th
 | Task | Pts | Freq |
 |---|---|---|
 | Bath the kids | 4 | daily |
+| Make baby food | 4 | weekly |
+| Wash baby food containers + gear | 2 | daily |
 | Bedtime routine (5-y-o) | 4 | daily |
 | Night feed / night wake-up (per wake) | 3 | nightly |
 | Sort/organize kids' clothes (outgrown, seasons) | 5 | monthly |
