@@ -191,6 +191,10 @@ export function deriveState(input: DeriveInput): Derived {
       case 'decline':
         declines.push(e)
         break
+      case 'schedule':
+      case 'unschedule':
+        // Points math ignores both (issue #66); deriveSchedule owns them.
+        break
     }
   }
 

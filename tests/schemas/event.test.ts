@@ -59,4 +59,64 @@ describe('ChoreEvent schema', () => {
     const ev = ChoreEvent.parse({ ...base, type: 'claim', rewardId: 'r-1', forUid: 'ana', cost: 15 })
     expect(ChoreEvent.parse(JSON.parse(JSON.stringify(ev)))).toEqual(ev)
   })
+
+  it('a schedule needs taskId, refEventId, dueAt and days between 1 and 365', () => {
+    const ok = ChoreEvent.parse({
+      ...base,
+      type: 'schedule',
+      taskId: 'task-1',
+      refEventId: 'ev-0',
+      dueAt: '2026-09-16T21:00:00.000Z',
+      days: 7,
+    })
+    expect(ok.type).toBe('schedule')
+    if (ok.type === 'schedule') expect(ok.dueAt).toBeInstanceOf(Date)
+    expect(
+      ChoreEvent.safeParse({
+        ...base,
+        type: 'schedule',
+        refEventId: 'ev-0',
+        dueAt: '2026-09-16T21:00:00.000Z',
+        days: 7,
+      }).success,
+    ).toBe(false)
+    expect(
+      ChoreEvent.safeParse({
+        ...base,
+        type: 'schedule',
+        taskId: 'task-1',
+        refEventId: 'ev-0',
+        dueAt: '2026-09-16T21:00:00.000Z',
+        days: 0,
+      }).success,
+    ).toBe(false)
+    expect(
+      ChoreEvent.safeParse({
+        ...base,
+        type: 'schedule',
+        taskId: 'task-1',
+        refEventId: 'ev-0',
+        dueAt: '2026-09-16T21:00:00.000Z',
+        days: 366,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('an unschedule only needs refEventId', () => {
+    const ok = ChoreEvent.parse({ ...base, type: 'unschedule', refEventId: 'ev-sched-1' })
+    expect(ok.type).toBe('unschedule')
+    expect(ChoreEvent.safeParse({ ...base, type: 'unschedule' }).success).toBe(false)
+  })
+
+  it('round-trips a schedule through JSON', () => {
+    const ev = ChoreEvent.parse({
+      ...base,
+      type: 'schedule',
+      taskId: 'task-1',
+      refEventId: 'ev-0',
+      dueAt: '2026-09-16T21:00:00.000Z',
+      days: 7,
+    })
+    expect(ChoreEvent.parse(JSON.parse(JSON.stringify(ev)))).toEqual(ev)
+  })
 })

@@ -19,6 +19,8 @@ export const Task = z.object({
   parentId: OptId,
   /** On a parent: bonus when every active sub-item is done the same day. */
   comboBonus: Int(z.number().int().min(0).optional()),
+  /** Days until "Next time?" should suggest this task again; falls back to `freq` when unset (Plan §5.5). */
+  intervalDays: Int(z.number().int().min(1).max(365).optional()),
   archived: Bool(z.boolean().default(false)),
   sort: Int(z.number().int().default(0)),
   updatedAt: DateT,

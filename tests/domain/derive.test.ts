@@ -53,6 +53,18 @@ describe('balances', () => {
     expect(d.balances[MIA]).toBeUndefined()
     expect(d.balances[ANA]).toBe(0)
   })
+
+  it('schedule and unschedule events never move points (#66)', () => {
+    const c = complete(seed(SEED_IDS.pots), { forUid: ANA, points: 2 })
+    const sched = event('schedule', {
+      taskId: seed(SEED_IDS.pots).id,
+      refEventId: c.id,
+      dueAt: at('2026-09-16T21:00:00.000Z'),
+      days: 7,
+    })
+    const unsched = event('unschedule', { refEventId: sched.id })
+    expect(derive([c, sched, unsched]).balances[ANA]).toBe(2)
+  })
 })
 
 describe('claims', () => {

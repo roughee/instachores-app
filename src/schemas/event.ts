@@ -44,6 +44,16 @@ export const ChoreEvent = z.discriminatedUnion('type', [
     combo: z.string().min(1),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   }),
+  /** Picked on the "Next time?" sheet after `refEventId`'s completion (Plan §5.5). */
+  EventBase.extend({
+    type: z.literal('schedule'),
+    taskId: Id,
+    refEventId: Id,
+    dueAt: DateT,
+    days: Int(z.number().int().min(1).max(365)),
+  }),
+  /** "Bring back early" on a folded task: cancels the `schedule` at `refEventId`. */
+  EventBase.extend({ type: z.literal('unschedule'), refEventId: Id }),
 ])
 export type ChoreEvent = z.infer<typeof ChoreEvent>
 export type EventType = ChoreEvent['type']
