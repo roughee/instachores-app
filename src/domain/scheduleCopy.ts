@@ -41,8 +41,10 @@ export function weekdayShort(at: Date, tz: string): string {
   return cachedFormatter(weekdayFormatters, tz, { weekday: 'short' }).format(at)
 }
 
-/** The household-local day number (e.g. "15") `at` falls on. */
-function dayNumber(at: Date, tz: string): string {
+/** The household-local day number (e.g. "15") `at` falls on. Exported (issue
+ * #71) so the Schedule tab's own "Wed 16" chips reuse it rather than
+ * re-deriving the same Intl call in `scheduleView.ts`. */
+export function dayNumber(at: Date, tz: string): string {
   return cachedFormatter(dayNumberFormatters, tz, { day: 'numeric' }).format(at)
 }
 

@@ -303,7 +303,7 @@ Contrast is checked in CI with a tiny Vitest that runs WCAG contrast math over t
 
 | Component | Behaviour |
 |---|---|
-| `AppShell` | Bottom tab bar (Log · Today · Overview · Rewards), center FAB "Kitchen Reset", top status strip (sync dot, update toast). Safe-area aware. |
+| `AppShell` | Bottom tab bar (Log · Today · Schedule · Overview; Rewards moves into the Overview header in Phase 2, see issue #64), center FAB "Kitchen Reset", top status strip (sync dot, update toast). Safe-area aware. |
 | `HouseholdBar` | Single rounded bar, `--primary` fill, "187 / 250" in tabular numerals, tap to expand into member split. |
 | `CategoryTile` | 2-column grid tile; category color icon on `-soft` tint; count of tasks done today as small avatars in the corner. |
 | `TaskButton` | Full-width 56 px button: icon, name, points chip. Press → haptic + toast with Undo. Long-press → sheet (log for partner / kid, backdate, add note). Shows avatar dots for completions today. |

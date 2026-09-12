@@ -295,3 +295,31 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 70-category-scheduled-${scheme}.png`)
 }
+
+// Issue #71: the Schedule tab, with data -- Today (Wet-mop floors overdue,
+// Vacuum whole home due), Tomorrow (Vacuum one room, "back tomorrow" from
+// #70 becomes "Thu" here), Recently done from the three `demoLogs=3` quick
+// row completions. `?demo=1&demoLogs=3&demoSchedule=1` (main.ts) sets up
+// both the upcoming groups and the Recently done card in one run.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoLogs=3&demoSchedule=1#/schedule`, { waitUntil: 'networkidle' })
+  await page.getByRole('heading', { name: 'Schedule' }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}71-schedule-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 71-schedule-${scheme}.png`)
+}
+
+// Issue #71: the Schedule tab's full empty state -- nothing scheduled, and
+// (with plain `?demo=1`, no completions at all) nothing done recently
+// either.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/schedule`, { waitUntil: 'networkidle' })
+  await page.getByRole('heading', { name: 'Schedule' }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}71-schedule-empty-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 71-schedule-empty-${scheme}.png`)
+}

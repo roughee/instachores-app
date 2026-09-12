@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { daysAgoLabel, memberName, scheduledBackLabel, taskRowCopy, weekdayShort } from '@/domain/scheduleCopy'
+import {
+  dayNumber,
+  daysAgoLabel,
+  memberName,
+  scheduledBackLabel,
+  taskRowCopy,
+  weekdayShort,
+} from '@/domain/scheduleCopy'
 import type { TaskSchedule } from '@/domain/schedule'
 import { ANA, BEN, NOW, TZ, household } from '../helpers/fixtures'
 
@@ -81,6 +88,13 @@ describe('taskRowCopy', () => {
       subline: 'Due since Mon. Last done 9 days ago by Ana',
       due: 'Due Mon',
     })
+  })
+})
+
+describe('dayNumber', () => {
+  it('is the household-local day number `at` falls on', () => {
+    // NOW + 6 days is Tue 2026-09-15 in Vilnius (schedule.test.ts's own example).
+    expect(dayNumber(daysFromNow(6), TZ)).toBe('15')
   })
 })
 

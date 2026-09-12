@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { resolveEntry, routes } from '@/router'
 
-const expectedPaths = ['/welcome', '/log', '/log/:category', '/today', '/overview', '/rewards', '/kid', '/settings']
+const expectedPaths = [
+  '/welcome',
+  '/log',
+  '/log/:category',
+  '/today',
+  '/schedule',
+  '/overview',
+  '/rewards',
+  '/kid',
+  '/settings',
+]
 
 describe('router', () => {
   it.each(expectedPaths)('has a route for %s with a component', (path) => {
