@@ -54,66 +54,46 @@ Existing rows read fine either way: a blank cell parses as absent (no
 `intervalDays` on an old task, no `dueAt`/`days` on an old event), the same
 as any other optional column.
 
+A sheet still missing these columns needs them added by hand and the script
+redeployed (both above) before running `seed --append` below: `seed --append`
+sends `intervalDays` for the seed rows that have one, and it only lands in
+the sheet once the deployed script's own `HEADERS.tasks` knows the column
+exists, same as any other `tasks.upsert`.
+
 ## Adding new catalog rows to an existing sheet
 
-Issue #63 added twelve rows to `src/domain/seed.ts`'s `ROWS` (a window-cleaning
-group, a freezer task, a few sort/organize tasks, and the new `car` category
-with its three tasks) and a `car` category to `Category`. `seed` only ever
-fills a completely empty `tasks`/`rewards` pair (`apps-script/Code.js`'s
-`seed` function checks `readTable(...).objects.length > 0` on both tabs and
-throws `invalid` -- "tasks and rewards must be empty to seed" -- if either
-already has a row); it never appends to a sheet that already has rows, so
-there is no risk of it duplicating the twelve rows onto a household that was
-seeded before this change, and this ticket leaves that refusal exactly as it
-is. There is also no CLI subcommand for adding a handful of rows (`seed` is
-the only write path `scripts/household.ts` exposes for `tasks`, and it is
-all-or-nothing). So an already-seeded household adds these by hand, once:
+`seed` only ever fills a completely empty `tasks`/`rewards` pair
+(`apps-script/Code.js`'s `seed` function checks `readTable(...).objects.length
+> 0` on both tabs and throws `invalid` -- "tasks and rewards must be empty to
+seed" -- if either already has a row); it never appends to a sheet that
+already has rows, so a household seeded before `src/domain/seed.ts`'s `ROWS`
+grew new entries (issue #63's window-cleaning group, freezer task and `car`
+category; issue #81's four kitchen/kids tasks; any later addition) never gets
+them from `seed` alone.
 
-1. Open the household spreadsheet's `tasks` tab.
-2. Copy the fourteen columns' worth of values below into new rows at the
-   bottom of the tab, one task per row, matching the tab's existing column
-   order (`v`, `id`, `name`, `category`, `points`, `freq`, `forRole`,
-   `parentId`, `comboBonus`, `intervalDays`, `archived`, `sort`, `updatedAt`,
-   `updatedBy`) -- read straight off `src/domain/seed.ts`'s new `ROWS`
-   entries (`task-home-windows` through `task-car-trunk`) so the values stay
-   byte-for-byte what a fresh seed would have sent. Leave `forRole`,
-   `parentId` and `comboBonus` blank except where `seed.ts` sets them (the
-   three window sub-items' `parentId` is `task-home-windows`; that parent's
-   own `comboBonus` is `2` and `intervalDays` is `90`). `sort` only orders
-   tasks within their own category, so any number after the existing rows in
-   that category is fine; it does not need to match `seed.ts`'s array index.
-3. Set `archived` to `FALSE`, `updatedAt` to the current time (ISO 8601, for
-   example `2026-09-12T00:00:00.000Z`), and `updatedBy` to whichever member
-   slug is adding the rows.
-4. Format the new cells as plain text (select the rows, **Format > Number >
-   Plain text**), matching every other row on the tab -- otherwise Sheets can
-   silently reformat an id like `task-home-windows` or an ISO timestamp.
+`seed --append` (issue #83) is the way to catch such a sheet up: it
+bootstraps the sheet, works out by id which seed tasks and rewards it does
+not have yet, and inserts exactly those with `tasks.upsert`/`rewards.upsert`
+-- existing rows are never touched.
 
-Existing rows and the app itself need no change: `car` is just another value
-of the same `category` column, and the app's own catalog already carries the
-`car` category, its grid tile and its colors from this ticket.
+```
+npm run household -- seed --append --dry-run --url <the web app URL> --secret <the secret>
+npm run household -- seed --append --url <the web app URL> --secret <the secret>
+```
 
-Issue #81 added four more rows to the same `ROWS` array, no new `Category`
-value this time: Make breakfast and Make lunch (`kitchen`), and Make baby food
-and Wash baby food containers + gear (`kids`). The same refusal-to-append
-behavior applies, so an already-seeded household adds these four the same
-way:
+Run the `--dry-run` line first to see what it would insert (grouped by
+category, with a count); run the second to actually insert it, answering `y`
+at the prompt (or add `--yes` to skip it). If the sheet already has every
+seed row, it says so and inserts nothing.
 
-1. Open the household spreadsheet's `tasks` tab.
-2. Copy the fourteen columns' worth of values for `task-kitchen-make-breakfast`,
-   `task-kitchen-make-lunch`, `task-kids-baby-food` and
-   `task-kids-baby-food-gear` into new rows at the bottom of the tab, one task
-   per row, matching the tab's existing column order -- read straight off
-   `src/domain/seed.ts`'s `ROWS` entries for those four ids so the values stay
-   byte-for-byte what a fresh seed would have sent. Leave `forRole` and
-   `comboBonus` blank; `task-kids-baby-food` is the only one of the four with
-   an `intervalDays` (`4`), and none of the four has a `parentId`.
-3. Set `archived` to `FALSE`, `updatedAt` to the current time (ISO 8601, for
-   example `2026-09-12T00:00:00.000Z`), and `updatedBy` to whichever member
-   slug is adding the rows.
-4. Format the new cells as plain text (select the rows, **Format > Number >
-   Plain text**), matching every other row on the tab -- otherwise Sheets can
-   silently reformat an id like `task-kids-baby-food` or an ISO timestamp.
+By-hand fallback: read the missing rows' fourteen columns straight off the
+relevant `src/domain/seed.ts` `ROWS` entries and paste them at the bottom of
+the `tasks` tab yourself, in the tab's existing column order (`v`, `id`,
+`name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`,
+`intervalDays`, `archived`, `sort`, `updatedAt`, `updatedBy`), with `archived`
+`FALSE`, `updatedAt` the current time (ISO 8601), `updatedBy` your member
+slug, and the new cells formatted as plain text (**Format > Number > Plain
+text**) to match every other row on the tab.
 
 ## Redeploying the script
 
@@ -127,5 +107,5 @@ Do this whenever `apps-script/Code.js` or `apps-script/appsscript.json` changes.
 
 - `check` fails both lines: the web app URL is wrong, or the deployment's access is not set to "Anyone". Re-check step 5.
 - `check` fails only the wrong-secret line: the Script Property `SECRET` is empty or missing. Re-check step 6.
-- `seed` refuses with "tasks and/or rewards tab already has rows": clear both tabs by hand (keep the header row) if you meant to start over, then run `seed` again.
+- `seed` refuses with "tasks and/or rewards tab already has rows": clear both tabs by hand (keep the header row) if you meant to start over, then run `seed` again -- or, to add the rows the sheet is missing without clearing anything, run `seed --append` instead (see "Adding new catalog rows to an existing sheet" above).
 - `members` rejects a spec: it prints exactly which part failed (an invalid hex color, an empty name, and so on); fix that one `--adult`/`--kid` argument and rerun.

@@ -52,6 +52,16 @@ const USAGE = `homecrew household setup CLI
       Posts the seed catalog (src/domain/seed.ts) to the script in one call.
       --dry-run prints the counts and the first three rows of each tab and
       sends nothing. Without --dry-run or --yes, asks for confirmation first.
+      Refuses (sends nothing) if the tasks or rewards tab already has rows;
+      see --append below for adding to a sheet that already has some.
+
+  npm run household -- seed --append --url <scriptUrl> [--secret <s>] [--by <uid>] [--dry-run] [--yes]
+      Bootstraps the sheet, works out which seed tasks and rewards it is
+      missing (by id), and inserts exactly those with one tasks.upsert or
+      rewards.upsert call per row -- existing rows are never touched.
+      --dry-run prints the rows that would be inserted, grouped by category,
+      and sends nothing. Without --dry-run or --yes, asks for confirmation
+      first; with nothing missing, prints that and exits without asking.
 
   npm run household -- members [--adult uid:Name:#hex ...] [--kid uid:Name:#hex ...]
       Validates each member and prints the rows to paste into the members
@@ -293,9 +303,155 @@ export function describeSeedRefusal(response: { code?: string; message?: string 
     'The script refused: the tasks and/or rewards tab already has rows.',
     response.message ? `Script said: ${response.message}` : undefined,
     'seed only ever fills empty tabs. Clear both tabs by hand (keep the header row) if you meant to start over.',
+    'To add rows the sheet is missing without touching what is already there, run seed again with --append.',
   ]
     .filter((line): line is string => Boolean(line))
     .join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// seed --append (issue #83)
+// ---------------------------------------------------------------------------
+
+/** Reads `id` off each raw bootstrap row as a string, skipping rows with no id (or a non-string one). */
+function idsFromBootstrapRows(rows: unknown[] | undefined): Set<string> {
+  const ids = new Set<string>()
+  for (const row of rows ?? []) {
+    if (row === null || typeof row !== 'object') continue
+    const id = (row as { id?: unknown }).id
+    if (typeof id === 'string' && id.length > 0) ids.add(id)
+  }
+  return ids
+}
+
+/**
+ * The seed tasks and rewards whose id is not already in the sheet
+ * (`bootstrapResponse`'s raw `tasks`/`rewards` rows), in seed order -- so a
+ * group parent still precedes its own sub-items. Existing rows are never
+ * touched, and a sheet row whose id is not part of the seed catalog at all
+ * is simply ignored.
+ */
+export function missingSeedRows(
+  bootstrapResponse: { tasks?: unknown[]; rewards?: unknown[] },
+  payload: SeedPayload,
+): SeedPayload {
+  const existingTaskIds = idsFromBootstrapRows(bootstrapResponse.tasks)
+  const existingRewardIds = idsFromBootstrapRows(bootstrapResponse.rewards)
+  return {
+    tasks: payload.tasks.filter((task) => !existingTaskIds.has(task.id)),
+    rewards: payload.rewards.filter((reward) => !existingRewardIds.has(reward.id)),
+  }
+}
+
+function formatMissingTaskLine(task: SeedPayload['tasks'][number]): string {
+  return `+ ${task.name} (${task.category}, ${task.points} pts)`
+}
+
+function formatMissingRewardLine(reward: SeedPayload['rewards'][number]): string {
+  return `+ ${reward.name} (${reward.cost} pts)`
+}
+
+/** What --append (with or without --dry-run) prints to describe the rows it would insert: tasks grouped by category, then rewards, then the counts. */
+export function formatAppendDryRun(missing: SeedPayload): string {
+  const lines: string[] = []
+  const categories: string[] = []
+  for (const task of missing.tasks) {
+    if (!categories.includes(task.category)) categories.push(task.category)
+  }
+  for (const category of categories) {
+    lines.push(`${category}:`)
+    for (const task of missing.tasks.filter((t) => t.category === category)) {
+      lines.push(`  ${formatMissingTaskLine(task)}`)
+    }
+  }
+  if (missing.rewards.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push('rewards:')
+    for (const reward of missing.rewards) {
+      lines.push(`  ${formatMissingRewardLine(reward)}`)
+    }
+  }
+  lines.push('')
+  lines.push(`${missing.tasks.length} missing tasks, ${missing.rewards.length} missing rewards`)
+  return lines.join('\n')
+}
+
+/**
+ * The whole `seed --append` flow, with the network call and the
+ * confirmation prompt injected so tests/scripts/household.test.ts can drive
+ * it against a fake instead of a live script: posts `bootstrap`, works out
+ * `missingSeedRows`, then (unless --dry-run, or nothing is missing) confirms
+ * and posts one tasks.upsert/rewards.upsert per missing row in order,
+ * stopping at the first failure.
+ */
+export async function runSeedAppend(
+  url: string,
+  secret: string,
+  payload: SeedPayload,
+  opts: { dryRun: boolean; yes: boolean },
+  deps: {
+    post: (url: string, secret: string, action: string, params?: object) => Promise<ActionResponse>
+    confirm: (question: string) => Promise<boolean>
+    log?: (line: string) => void
+    error?: (line: string) => void
+  },
+): Promise<number> {
+  const log = deps.log ?? console.log
+  const error = deps.error ?? console.error
+
+  const bootstrapResponse = await deps.post(url, secret, 'bootstrap')
+  if (bootstrapResponse.ok === false) {
+    error(`bootstrap failed: ${bootstrapResponse.code ?? 'unknown'} ${bootstrapResponse.message ?? ''}`.trim())
+    return 1
+  }
+
+  const bootstrapTasks = Array.isArray(bootstrapResponse.tasks) ? bootstrapResponse.tasks : []
+  const bootstrapRewards = Array.isArray(bootstrapResponse.rewards) ? bootstrapResponse.rewards : []
+  const missing = missingSeedRows({ tasks: bootstrapTasks, rewards: bootstrapRewards }, payload)
+
+  if (opts.dryRun) {
+    log(formatAppendDryRun(missing))
+    return 0
+  }
+
+  if (missing.tasks.length === 0 && missing.rewards.length === 0) {
+    log('Nothing to add: the sheet already has every seed row.')
+    return 0
+  }
+
+  if (!opts.yes) {
+    const proceed = await deps.confirm(
+      `This inserts ${missing.tasks.length} missing tasks and ${missing.rewards.length} missing rewards into ${url}. Continue? [y/N] `,
+    )
+    if (!proceed) {
+      log('Aborted, nothing sent.')
+      return 1
+    }
+  }
+
+  for (const task of missing.tasks) {
+    const response = await deps.post(url, secret, 'tasks.upsert', { task })
+    if (response.ok === false) {
+      error(
+        `Failed inserting ${task.name} (${task.id}): ${response.code ?? 'unknown'} ${response.message ?? ''}`.trim(),
+      )
+      return 1
+    }
+    log(formatMissingTaskLine(task))
+  }
+  for (const reward of missing.rewards) {
+    const response = await deps.post(url, secret, 'rewards.upsert', { reward })
+    if (response.ok === false) {
+      error(
+        `Failed inserting ${reward.name} (${reward.id}): ${response.code ?? 'unknown'} ${response.message ?? ''}`.trim(),
+      )
+      return 1
+    }
+    log(formatMissingRewardLine(reward))
+  }
+
+  log(`Inserted ${missing.tasks.length} tasks and ${missing.rewards.length} rewards.`)
+  return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -414,6 +570,10 @@ async function cmdSeed(args: ParsedArgs): Promise<number> {
   const by = flagValue(args, 'by') ?? 'setup'
   const dryRun = hasFlag(args, 'dry-run')
   const payload = buildSeedPayload(new Date(), by)
+
+  if (hasFlag(args, 'append')) {
+    return runSeedAppend(url, secret, payload, { dryRun, yes: hasFlag(args, 'yes') }, { post: postAction, confirm })
+  }
 
   if (dryRun) {
     console.log(formatSeedDryRun(payload))
