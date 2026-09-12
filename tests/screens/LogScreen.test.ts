@@ -141,7 +141,7 @@ describe('LogScreen', () => {
     const completeEventId = eventsStore.recentlyLogged?.eventId
     await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
 
-    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 1)
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 1, expect.any(String))
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.get('[role="status"]').text()).toContain('Pots logged')
   })

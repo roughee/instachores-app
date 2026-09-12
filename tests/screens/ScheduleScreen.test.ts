@@ -172,7 +172,7 @@ describe('ScheduleScreen', () => {
     await threeDays.trigger('click')
     await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
 
-    expect(scheduleNextSpy).toHaveBeenCalledWith(newCompleteId, 3)
+    expect(scheduleNextSpy).toHaveBeenCalledWith(newCompleteId, 3, 'task-mop')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.get('[role="status"]').text()).toContain('Wet-mop floors logged')
   })

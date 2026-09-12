@@ -189,7 +189,7 @@ describe('CategoryScreen', () => {
     await sevenDaysChip.trigger('click')
     await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
 
-    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 3)
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 3, 'task-cook-dinner')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.get('[role="status"]').text()).toContain('Cook dinner logged')
   })
@@ -267,7 +267,8 @@ describe('CategoryScreen', () => {
 
     const completeEventId = eventsStore.recentlyLogged?.eventId
     await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
-    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 7)
+    // The parent's id, not the last sub-item's: the schedule is the group's.
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 7, 'task-bathroom')
   })
 
   it('shows two avatar dots for a task already done today by both adults, and it stays tappable', async () => {

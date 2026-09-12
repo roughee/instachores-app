@@ -573,6 +573,26 @@ describe('eventsStore.schedule (issue #68)', () => {
 })
 
 describe('eventsStore.scheduleNext (issue #68)', () => {
+  it('schedules a group parent off its last sub-item complete when given the parent id (#71 review)', async () => {
+    const parent = task({ id: 'task-bath', name: 'Clean bathroom', points: 0, comboBonus: 2, freq: 'weekly' })
+    const toilet = task({ id: 'task-toilet', points: 4, freq: 'weekly', parentId: 'task-bath' })
+    const sink = task({ id: 'task-sink', points: 2, freq: 'weekly', parentId: 'task-bath' })
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [parent, toilet, sink] }])
+    const { eventsStore } = bindAll(repo)
+    useSessionStore().memberUid = ANA
+
+    await eventsStore.completeMany(['task-toilet', 'task-sink'])
+    const last = eventsStore.recentlyLogged!.eventId
+
+    await eventsStore.scheduleNext(last, 7, 'task-bath')
+
+    const sched = eventsStore.events.find((e) => e.type === 'schedule')!
+    expect(sched.taskId).toBe('task-bath')
+    expect(sched.refEventId).toBe(last)
+    expect(eventsStore.schedule.get('task-bath')?.state).toBe('away')
+    expect(eventsStore.schedule.get('task-sink')?.state).toBe('listed')
+  })
+
   it('appends one schedule event referencing the complete, with the right shape', async () => {
     const pots = task({ id: 'task-pots', points: 4, freq: 'weekly' })
     const repo = new MemoryRepo([{ id: HID, household: household(), tasks: [pots] }])

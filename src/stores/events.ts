@@ -381,7 +381,12 @@ export const useEventsStore = defineStore('events', () => {
    * already undone, or from a different household): there is nothing to
    * schedule off of.
    */
-  async function scheduleNext(completeEventId: string, days: number): Promise<void> {
+  /**
+   * `taskId` defaults to the complete's own task; a group "Do all" passes
+   * the parent's id, since the reference is the last sub-item's complete
+   * but the schedule belongs to the group (#71 review).
+   */
+  async function scheduleNext(completeEventId: string, days: number, taskId?: string): Promise<void> {
     if (!boundRepo || !boundHouseholdId) throw new Error('events.scheduleNext: no household connected')
     const householdStore = useHouseholdStore()
     if (!householdStore.household) throw new Error('events.scheduleNext: household not loaded')
@@ -404,7 +409,7 @@ export const useEventsStore = defineStore('events', () => {
       actorUid,
       at,
       loggedAt: at,
-      taskId: complete.taskId,
+      taskId: taskId ?? complete.taskId,
       refEventId: completeEventId,
       dueAt,
       days,
