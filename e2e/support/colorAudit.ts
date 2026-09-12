@@ -47,6 +47,7 @@ const TOKENS = [
   '--cat-kids',
   '--cat-home',
   '--cat-admin',
+  '--cat-car',
   '--cat-kitchen-soft',
   '--cat-laundry-soft',
   '--cat-floors-soft',
@@ -54,6 +55,7 @@ const TOKENS = [
   '--cat-kids-soft',
   '--cat-home-soft',
   '--cat-admin-soft',
+  '--cat-car-soft',
 ] as const
 
 export interface ColorOffender {

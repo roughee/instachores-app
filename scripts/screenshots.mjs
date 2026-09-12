@@ -323,3 +323,28 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 71-schedule-empty-${scheme}.png`)
 }
+
+// Issue #63: the Log grid with the new Car tile, eighth after Admin. A
+// taller viewport (like the 21-settings block above) keeps the whole
+// 2-column grid in one shot without scrolling past the fixed bottom tab bar.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 1200 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/log`, { waitUntil: 'networkidle' })
+  await page.getByRole('link', { name: /Car/ }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}63-log-car-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 63-log-car-${scheme}.png`)
+}
+
+// Issue #63: the Car category screen, its three plain TaskButtons (Car
+// wash, Car carpets, Car trunk cleanout).
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1#/log/car`, { waitUntil: 'networkidle' })
+  await page.getByText('Car trunk cleanout').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}63-category-car-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 63-category-car-${scheme}.png`)
+}

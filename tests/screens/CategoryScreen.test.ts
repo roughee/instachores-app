@@ -117,6 +117,14 @@ function floorsTasks() {
   ]
 }
 
+function carTasks() {
+  return [
+    task({ id: 'task-car-wash', name: 'Car wash', category: 'car', points: 5, sort: 0 }),
+    task({ id: 'task-car-carpets', name: 'Car carpets', category: 'car', points: 4, sort: 1 }),
+    task({ id: 'task-car-trunk', name: 'Car trunk cleanout', category: 'car', points: 3, sort: 2 }),
+  ]
+}
+
 const DAY_MS = 86_400_000
 
 describe('CategoryScreen', () => {
@@ -286,6 +294,22 @@ describe('CategoryScreen', () => {
     const button = wrapper.findAll('[data-test="task-button"]').find((b) => b.text().includes('Clean kitchen'))!
     await button.trigger('click')
     expect(eventsStore.events.filter((e) => e.type === 'complete' && e.taskId === 'task-counters')).toHaveLength(3)
+  })
+
+  it('lists the three car tasks on #/log/car (issue #63)', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: carTasks() }])
+    bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/car')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+
+    expect(wrapper.text()).toContain('Car')
+    expect(wrapper.text()).toContain('Car wash')
+    expect(wrapper.text()).toContain('Car carpets')
+    expect(wrapper.text()).toContain('Car trunk cleanout')
+    expect(wrapper.findAll('[data-test="task-button"]')).toHaveLength(3)
+    expect(wrapper.get('.category-screen__header').classes()).toContain('category-screen__header--car')
   })
 
   it('shows the empty state with one action when the category has no tasks', async () => {

@@ -33,6 +33,7 @@
   --cat-kids: #c9508c;
   --cat-home: #539232;
   --cat-admin: #6b6f7a;
+  --cat-car: #8b5e34;
 
   --radius-card: 16px;
   --radius-button: 12px;
@@ -59,6 +60,7 @@
   --cat-kids-soft: color-mix(in oklab, var(--cat-kids) 14%, var(--surface));
   --cat-home-soft: color-mix(in oklab, var(--cat-home) 14%, var(--surface));
   --cat-admin-soft: color-mix(in oklab, var(--cat-admin) 14%, var(--surface));
+  --cat-car-soft: color-mix(in oklab, var(--cat-car) 14%, var(--surface));
 }
 
 [data-theme='dark'] {
@@ -83,6 +85,7 @@
   --cat-kids: #ea84b6;
   --cat-home: #8fc96c;
   --cat-admin: #a0a4ae;
+  --cat-car: #d4a276;
 }
 
 /* System theme (no explicit data-theme): follow the OS, unless the user
@@ -110,6 +113,7 @@
     --cat-kids: #ea84b6;
     --cat-home: #8fc96c;
     --cat-admin: #a0a4ae;
+    --cat-car: #d4a276;
   }
 }
 

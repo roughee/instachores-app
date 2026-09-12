@@ -26,6 +26,7 @@ const CATEGORY_TOKENS = [
   'cat-kids',
   'cat-home',
   'cat-admin',
+  'cat-car',
 ] as const
 
 function requireToken(tokens: TokenBlock, name: string, theme: string): string {

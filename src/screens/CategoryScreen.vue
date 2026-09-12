@@ -459,6 +459,10 @@ onMounted(async () => {
   color: var(--cat-admin);
 }
 
+.category-screen__header--car .category-screen__header-icon {
+  color: var(--cat-car);
+}
+
 .category-screen__header--kitchen {
   background: var(--cat-kitchen-soft);
 }
@@ -485,6 +489,10 @@ onMounted(async () => {
 
 .category-screen__header--admin {
   background: var(--cat-admin-soft);
+}
+
+.category-screen__header--car {
+  background: var(--cat-car-soft);
 }
 
 .category-screen__list {

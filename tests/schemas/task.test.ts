@@ -35,6 +35,10 @@ describe('Task schema', () => {
     expect(Task.safeParse({ ...valid, category: 'garage' }).success).toBe(false)
   })
 
+  it('accepts the car category (issue #63)', () => {
+    expect(Task.safeParse({ ...valid, category: 'car' }).success).toBe(true)
+  })
+
   it('parses a sheet row: numbers as text, TRUE/FALSE booleans, empty optional cells', () => {
     const row = {
       v: '1',

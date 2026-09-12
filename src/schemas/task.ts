@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { Bool, DateT, Id, Int, OptId, V1 } from './cells'
 
-export const Category = z.enum(['kitchen', 'laundry', 'floors', 'bathroom', 'kids', 'home', 'admin', 'kid'])
+export const Category = z.enum(['kitchen', 'laundry', 'floors', 'bathroom', 'kids', 'home', 'admin', 'car', 'kid'])
 export type Category = z.infer<typeof Category>
 
 export const Freq = z.enum(['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'adhoc'])
