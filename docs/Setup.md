@@ -13,7 +13,7 @@ Read first: `docs/Architecture.md` §4 (the sheet), §5 (the Apps Script API), �
 5. Deploy the script as a web app: **Deploy > New deployment**, type "Web app", execute as **Me**, who has access **Anyone**. Click Deploy and copy the web app URL and the deployment id it shows. Write the deployment id (not the secret) into `apps-script/README.md` where the next deploy will look for it.
 6. Run `npm run household -- secret`. It prints a fresh secret and the exact steps to store it as the Script Property `SECRET` in the Apps Script editor (Project Settings > Script Properties). Do that now.
 7. Run `npm run household -- check --url <the web app URL> --secret <the secret>`. It should print two `PASS` lines: the right secret is accepted, a wrong one is rejected. If either says `FAIL`, fix the Script Property before continuing.
-8. If the Phase 0 session changed any point value from what is in `src/domain/seed.ts`, edit the `ROWS` array there first (that file is what the `seed` command sends) and run `npm run check` before continuing, so the catalog it seeds already carries the agreed values.
+8. If the Phase 0 session changed any point value from what is in `src/domain/seed.ts`, edit the `ROWS` array there first (that file is what the `seed` command sends) and run `npm run check` before continuing, so the catalog it seeds already carries the agreed values. A handful of rows also carry an `intervalDays` (Fridge cleanout, Vacuum, Mop, Clean bathroom, and so on): the `seed` command sends it straight through for the rows that have one, and leaves it blank for the rows that don't.
 9. Run `npm run household -- seed --url <the web app URL> --secret <the secret>`. It asks for confirmation before sending; answer `y`. It refuses cleanly (and sends nothing) if the tabs already have rows, so it is safe to run again on a truly empty sheet.
 10. Run `npm run household -- members --adult <uid>:<Name>:<#hex> --adult <uid>:<Name>:<#hex> --kid <uid>:<Name>:<#hex>` with the two adults' and the kid's chosen slugs, names and colors (a slug is a short lowercase word like `ana`, `ben`, `mia`; colors are 6-digit hex like `#128369`). Paste the rows it prints under the header row of the sheet's `members` tab by hand. There is no API action for this; the members tab is always edited directly.
 11. In the Google Sheet, click **Share** and add your partner as an **Editor**.
@@ -29,6 +29,30 @@ Do this if the secret ever leaks (screenshot in the wrong chat, shared device, a
 2. In the Apps Script editor, Project Settings > Script Properties, edit `SECRET` to the new value.
 3. Run `npm run household -- check --url <the web app URL> --secret <the new secret>` to confirm the new value took effect and the old one no longer works.
 4. Run `npm run household -- link --url <the web app URL> --secret <the new secret>` and re-share it with your partner over the same private channel. Every phone still holding the old secret gets `unauthorized` until it opens the new link.
+
+## Adding the schedule columns to an existing sheet
+
+Issue #67 added three columns to a household sheet created before the Schedule
+tab (issue #64) existed: `intervalDays` on `tasks`, and `dueAt` and `days` on
+`events`. A sheet created after this change already has them from
+`setupTemplate`; a sheet created before it needs them added by hand, once:
+
+1. Open the household spreadsheet.
+2. On the `tasks` tab, append a header cell reading `intervalDays` right
+   after `comboBonus`.
+3. On the `events` tab, append two header cells reading `dueAt` and `days`
+   after the last column (`day`).
+4. Format the new columns as plain text (select the columns, **Format >
+   Number > Plain text**), matching every other column on those tabs.
+5. Redeploy the script (below): `eventsAppend`/`genericUpsert` write new rows
+   using the header list baked into the deployed `Code.js`, not the sheet's
+   own header row, so a schedule/unschedule event's `dueAt`/`days` (or a
+   task's `intervalDays`) only land in the sheet once the deployed script
+   knows about those columns too.
+
+Existing rows read fine either way: a blank cell parses as absent (no
+`intervalDays` on an old task, no `dueAt`/`days` on an old event), the same
+as any other optional column.
 
 ## Redeploying the script
 

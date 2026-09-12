@@ -42,7 +42,11 @@ const USAGE = `homecrew household setup CLI
 
   npm run household -- check --url <scriptUrl> [--secret <s>]
       Calls the version action with the right secret, then with a wrong one.
-      Prints PASS/FAIL for each. Exits 1 if either check fails.
+      Prints PASS/FAIL for each. Also calls bootstrap and reports whether the
+      schedule columns (tasks.intervalDays, events.dueAt, events.days) show up
+      on the sheet, or can't be told yet for lack of a row to check. Exits 1
+      if either PASS/FAIL check fails; the schedule-column report never
+      affects the exit code.
 
   npm run household -- seed --url <scriptUrl> [--secret <s>] [--by <uid>] [--dry-run] [--yes]
       Posts the seed catalog (src/domain/seed.ts) to the script in one call.
@@ -206,6 +210,57 @@ export function evaluateCheckResults(rightSecretResponse: unknown, wrongSecretRe
 }
 
 // ---------------------------------------------------------------------------
+// check: schedule columns (issue #67)
+// ---------------------------------------------------------------------------
+
+export interface ScheduleColumnCheck {
+  column: string
+  /**
+   * 'present'/'missing' only mean something when at least one row came back
+   * to look at: `rowToObject` (apps-script/Code.js) sets every header's key
+   * on every row it reads, blank cell or not, so the key's presence tells
+   * whether the column exists in the sheet. With no rows at all -- an empty
+   * tasks tab, or an events tab nobody has scheduled anything on yet -- there
+   * is nothing to look at, and 'unknown' says so rather than reporting a
+   * false 'missing' (Apps Script's request/response shapes stay unchanged,
+   * so this is the most a `bootstrap` call can tell us).
+   */
+  status: 'present' | 'missing' | 'unknown'
+}
+
+function columnStatus(rows: unknown[], key: string): ScheduleColumnCheck['status'] {
+  if (rows.length === 0) return 'unknown'
+  return rows.some((row) => row !== null && typeof row === 'object' && key in row) ? 'present' : 'missing'
+}
+
+/**
+ * Reports whether `bootstrap`'s tasks/events rows carry the schedule
+ * columns added in issue #67 (`tasks.intervalDays`, `events.dueAt`,
+ * `events.days`) — the closest existing verification `check` has, since no
+ * new Apps Script action is allowed to expose sheet headers directly.
+ */
+export function checkScheduleColumns(bootstrap: { tasks?: unknown[]; events?: unknown[] }): ScheduleColumnCheck[] {
+  const tasks = bootstrap.tasks ?? []
+  const events = bootstrap.events ?? []
+  return [
+    { column: 'tasks.intervalDays', status: columnStatus(tasks, 'intervalDays') },
+    { column: 'events.dueAt', status: columnStatus(events, 'dueAt') },
+    { column: 'events.days', status: columnStatus(events, 'days') },
+  ]
+}
+
+/** One readable line per `checkScheduleColumns` result, for `check`'s console output. */
+export function formatScheduleColumnChecks(checks: ScheduleColumnCheck[]): string {
+  const label: Record<ScheduleColumnCheck['status'], string> = {
+    present: 'present',
+    missing: 'MISSING -- see docs/Setup.md, "Adding the schedule columns to an existing sheet"',
+    unknown:
+      'cannot tell yet (no rows to check) -- see docs/Setup.md, "Adding the schedule columns to an existing sheet"',
+  }
+  return checks.map((c) => `  ${c.column}: ${label[c.status]}`).join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // seed
 // ---------------------------------------------------------------------------
 
@@ -324,6 +379,22 @@ async function cmdCheck(args: ParsedArgs): Promise<number> {
   for (const outcome of summary.outcomes) {
     console.log(`${outcome.ok ? 'PASS' : 'FAIL'} - ${outcome.name} (${outcome.detail})`)
   }
+
+  console.log('')
+  console.log('Schedule columns (issue #67):')
+  try {
+    const bootstrapResponse = await postAction(url, secret, 'bootstrap')
+    if (bootstrapResponse.ok === false) {
+      console.log('  could not check: bootstrap answered ' + (bootstrapResponse.code ?? 'an error'))
+    } else {
+      const tasks = Array.isArray(bootstrapResponse.tasks) ? bootstrapResponse.tasks : []
+      const events = Array.isArray(bootstrapResponse.events) ? bootstrapResponse.events : []
+      console.log(formatScheduleColumnChecks(checkScheduleColumns({ tasks, events })))
+    }
+  } catch (err) {
+    console.log(`  could not check: ${(err as Error).message}`)
+  }
+
   return summary.allPass ? 0 : 1
 }
 

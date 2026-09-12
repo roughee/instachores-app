@@ -24,13 +24,13 @@ field names in `src/schemas/` exactly, all cells formatted as plain text
 (`@` number format) so the script can read and write dates and numbers as
 strings without Sheets reformatting them.
 
-| Tab         | Shape                          | Header row                                                                                                                              |
-| ----------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `household` | key/value, one row per key     | `key`, `value`                                                                                                                          |
-| `members`   | one row per member             | `uid`, `name`, `color`, `role`                                                                                                          |
-| `tasks`     | one row per task               | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `archived`, `sort`, `updatedAt`, `updatedBy`      |
-| `rewards`   | one row per reward             | `v`, `id`, `name`, `cost`, `kind`, `commitment`, `archived`, `updatedAt`, `updatedBy`                                                   |
-| `events`    | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day` |
+| Tab         | Shape                          | Header row                                                                                                                                               |
+| ----------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `household` | key/value, one row per key     | `key`, `value`                                                                                                                                           |
+| `members`   | one row per member             | `uid`, `name`, `color`, `role`                                                                                                                           |
+| `tasks`     | one row per task               | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `intervalDays`, `archived`, `sort`, `updatedAt`, `updatedBy`       |
+| `rewards`   | one row per reward             | `v`, `id`, `name`, `cost`, `kind`, `commitment`, `archived`, `updatedAt`, `updatedBy`                                                                    |
+| `events`    | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day`, `dueAt`, `days` |
 
 The `household` tab holds one row per key below the header, e.g.:
 

@@ -75,9 +75,9 @@ One spreadsheet is one household. Five tabs. Row 1 of every tab is the header an
 |---|---|---|
 | `household` | key/value, one row per key | `key`, `value` with keys `v`, `id`, `name`, `weeklyTarget`, `tz`, `createdAt` |
 | `members` | one row per member | `uid`, `name`, `color`, `role` |
-| `tasks` | one row per task | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `archived`, `sort`, `updatedAt`, `updatedBy` |
+| `tasks` | one row per task | `v`, `id`, `name`, `category`, `points`, `freq`, `forRole`, `parentId`, `comboBonus`, `intervalDays`, `archived`, `sort`, `updatedAt`, `updatedBy` |
 | `rewards` | one row per reward | `v`, `id`, `name`, `cost`, `kind`, `commitment`, `archived`, `updatedAt`, `updatedBy` |
-| `events` | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day` |
+| `events` | one row per event, append-only | `v`, `id`, `type`, `actorUid`, `at`, `loggedAt`, `note`, `taskId`, `forUid`, `points`, `refEventId`, `rewardId`, `cost`, `combo`, `day`, `dueAt`, `days` |
 
 Rules for the sheet:
 
