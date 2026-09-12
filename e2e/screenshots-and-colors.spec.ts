@@ -37,9 +37,14 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // A couple of logged tasks so both screens show real data, not the
       // empty state.
+      // Each completion opens the Next time? sheet (issue #69); dismiss it
+      // so the next tap is not blocked by its scrim and the screenshot shows
+      // the Log screen itself.
       const taskButtons = page.getByTestId('task-button')
       await taskButtons.nth(0).click()
+      await page.getByTestId('next-time-not-now').click()
       await taskButtons.nth(1).click()
+      await page.getByTestId('next-time-not-now').click()
       await expect(page.locator('.household-bar__numbers')).toHaveText('5 / 250')
 
       await page.screenshot({ path: testInfo.outputPath(`log-${scheme}.png`) })
