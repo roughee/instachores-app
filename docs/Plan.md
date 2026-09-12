@@ -360,6 +360,13 @@ Each page lists purpose, layout, states, and the acceptance criteria that become
 - **Layout**: big friendly tiles with icons, star counter, reward shelf. Larger type, no points, no adult data.
 - **Acceptance**: kid events accrue `stars`, never adult points; the screen is reachable only from an adult session (no separate login).
 
+#### `#/schedule` Schedule (issue #64)
+- **Purpose**: answer "when does it come back?" at the moment a task is logged, and show what is due, what is coming up and what was done recently. Design: `docs/design/schedule/` and the canvas linked from #64.
+- **Layout**: sections Today (due and overdue), Tomorrow, This week, Later; each row = category icon, task, "N days ago · who", points, due day. Below, Recently done for the last 7 days with "back in N days". Tapping a due row logs it (the same two-tap promise as Log) and opens the Next time? sheet.
+- **Next time? sheet**: after a `complete` on Log, Category or Today, when the task has an interval. Chips Tomorrow / 3 days / 5 days / 7 days / Pick a date with the task's `intervalDays` preselected (fallback from `freq`: daily 1, weekly 7, biweekly 14, monthly 30, quarterly 90, adhoc none); one tap on "Schedule for <day>" appends a `schedule` event; "Not now" leaves the task listed. Undo within 4 s drops the schedule with the completion.
+- **States**: a scheduled task is away until the household-local start of its due day: hidden from its category rows, the quick row and the due dots, shown under a muted "Scheduled" fold on the Category screen ("back Tue 15", tap to bring back early via `unschedule`). On the due day it returns with a Due chip and "Last done N days ago by X"; overdue stays listed with the day it was due. Nothing scheduled: `EmptyState` "Nothing scheduled yet. Log a task and pick its next time."
+- **Acceptance**: `deriveSchedule` is pure and DST-safe; the effective schedule is the latest `schedule` whose completion is not undone, not unscheduled and not superseded by a later completion; both phones derive the same lists from the same events; kid tasks never get the sheet.
+
 #### `#/settings` Settings
 - **Purpose**: everything that is not daily.
 - **Layout**: sections: Household (name, setup link with copy button, members, colors) · Tasks (list with search, edit, archive, reorder, points) · Rewards · Weekly target · Appearance (system / light / dark) · Sync panel (online, outbox count, last poll, member, script version, SW version, "Sync now") · Data (export JSON, import JSON, reset with typed confirmation) · About.
@@ -952,6 +959,7 @@ The app tracks; this is the operating plan it tracks against. Adjust freely.
 - **Success = both phones logging and seeing each other within 30 s, and instantly on opening the app,, in light and dark.**
 
 ### Phase 2 — Rewards & fairness (1 weekend)
+- Schedule tab and the Next time? sheet (#64): `intervalDays`, `schedule`/`unschedule` events, away tasks folded on Category.
 - Rewards catalog, claim/acknowledge flow, wallet.
 - Kitchen Reset combo detection + bonus.
 - Kudos 👏 (+1).
