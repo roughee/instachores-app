@@ -21,7 +21,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="recent-done-row">
+  <div class="recent-done-row" data-test="recent-done-row">
     <MemberAvatar :name="memberName" :color="memberColor" />
     <div class="recent-done-row__text">
       <p class="recent-done-row__name">{{ name }}</p>

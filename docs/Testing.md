@@ -109,6 +109,7 @@ What it covers, one spec per file under `e2e/`:
 | `two-contexts-sync.spec.ts` | An event appended in one browser context appears in another context's Today list within one poll interval |
 | `screenshots-and-colors.spec.ts` | Light/dark screenshots of Log and Overview, saved as test artifacts, plus a colour audit: every computed `color`/`background-color` on those screens must resolve to a token from `tokens.css` (or the documented member-color exception) |
 | `routing-and-service-worker.spec.ts` | A hard refresh on a hash route (`#/overview`) returns the app, not a 404; the service worker serves the shell when the page reloads offline |
+| `schedule-flow.spec.ts` | "Do all" on a combo group opens "Next time?" with its interval preselected; scheduling sends complete/bonus/schedule events in order, folds the group on Category, lists it on `#/schedule`'s "This week" and Recently done, syncs the fold to a second context within one poll, and "bring back early" from the fold sends `unschedule` and re-lists it |
 
 `e2e/support/mockSheet.ts` is the mocked script: a small in-memory "sheet" (`MockSheet`) that answers `bootstrap`, `events.since`, `events.append` and `version` the same way `apps-script/Code.js` does, plus a log of every `events.append` call for assertions. Route it into a `BrowserContext` with `routeMockSheet(context, sheet)`; the same `MockSheet` instance routed into two contexts is how the two-contexts spec makes them see each other, the same as two phones sharing one real sheet.
 
