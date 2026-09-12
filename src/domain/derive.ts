@@ -135,6 +135,10 @@ export interface DeriveInput {
   household: Household
   now: Date
   keyTasks?: { counters: string; quickDefaults: readonly string[] }
+  /** Task ids the Schedule tab currently has `away` (issue #68); excluded
+   * from the quick row and due dots so a folded task neither gets learned
+   * back in nor nags a category it is deliberately sitting out of. */
+  awayTaskIds?: ReadonlySet<string>
 }
 
 const QUICK_ROW_WINDOW_DAYS = 14
@@ -143,6 +147,7 @@ export function deriveState(input: DeriveInput): Derived {
   const { events, tasks, rewards, household, now } = input
   const tz = household.tz
   const keys = input.keyTasks ?? { counters: SEED_IDS.counters, quickDefaults: DEFAULT_QUICK_ROW }
+  const away = input.awayTaskIds ?? new Set<string>()
   const taskById = new Map(tasks.map((t) => [t.id, t]))
   const rewardById = new Map(rewards.map((r) => [r.id, r]))
   const adults = Object.values(household.members)
@@ -261,7 +266,7 @@ export function deriveState(input: DeriveInput): Derived {
   for (const c of done) {
     if (c.at.getTime() < since) continue
     const t = taskById.get(c.taskId)
-    if (!t || t.archived || t.forRole === 'kid') continue
+    if (!t || t.archived || t.forRole === 'kid' || away.has(t.id)) continue
     counts.set(t.id, (counts.get(t.id) ?? 0) + 1)
   }
   const quickRow = [...counts]
@@ -271,7 +276,7 @@ export function deriveState(input: DeriveInput): Derived {
   for (const id of keys.quickDefaults) {
     if (quickRow.length >= 3) break
     const t = taskById.get(id)
-    if (t && !quickRow.includes(t)) quickRow.push(t)
+    if (t && !away.has(t.id) && !quickRow.includes(t)) quickRow.push(t)
   }
 
   // Due dots: a category lights up when one of its tasks is past its window.
@@ -282,7 +287,7 @@ export function deriveState(input: DeriveInput): Derived {
   }
   const dueDots = Object.fromEntries(Category.options.map((c) => [c, false])) as Record<Category, boolean>
   for (const t of tasks) {
-    if (t.forRole !== 'kid' && isDue(t, lastDone.get(t.id), now)) dueDots[t.category] = true
+    if (t.forRole !== 'kid' && !away.has(t.id) && isDue(t, lastDone.get(t.id), now)) dueDots[t.category] = true
   }
 
   return {
