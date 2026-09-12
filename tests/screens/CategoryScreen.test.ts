@@ -72,11 +72,24 @@ function kitchenTasks() {
 
 function bathroomTasks() {
   return [
-    task({ id: 'task-bathroom', name: 'Clean bathroom', category: 'bathroom', points: 0, comboBonus: 2, sort: 0 }),
+    task({
+      id: 'task-bathroom',
+      name: 'Clean bathroom',
+      category: 'bathroom',
+      points: 0,
+      comboBonus: 2,
+      sort: 0,
+      freq: 'weekly',
+      intervalDays: 7,
+    }),
     task({ id: 'task-toilet', name: 'Toilet', category: 'bathroom', points: 4, sort: 1, parentId: 'task-bathroom' }),
     task({ id: 'task-sink', name: 'Sink', category: 'bathroom', points: 2, sort: 2, parentId: 'task-bathroom' }),
     task({ id: 'task-shower', name: 'Shower', category: 'bathroom', points: 4, sort: 3, parentId: 'task-bathroom' }),
   ]
+}
+
+function kidsTasks() {
+  return [task({ id: 'task-kid-star', name: 'Put toys away', category: 'kids', points: 1, forRole: 'kid' })]
 }
 
 describe('CategoryScreen', () => {
@@ -111,6 +124,60 @@ describe('CategoryScreen', () => {
     expect(completes[0]?.taskId).toBe('task-pots')
     expect(triggerSpy).toHaveBeenCalledTimes(1)
     expect(triggerSpy).toHaveBeenCalledWith('var(--cat-kitchen)')
+
+    // A sub-item chip tap never opens the Next time sheet (issue #69); the
+    // toast shows right away, same as before.
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toContain('Pots logged')
+  })
+
+  it('tapping a plain TaskButton opens the Next time sheet, preselected from the task', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: kitchenTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/kitchen')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper.findAll('[data-test="task-button"]').find((b) => b.text().includes('Cook dinner'))!
+    await button.trigger('click')
+
+    expect(eventsStore.events.filter((e) => e.type === 'complete')).toHaveLength(1)
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Cook dinner logged')
+  })
+
+  it('choosing Schedule on a plain task calls scheduleNext with the completion id and days, then shows the toast', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: kitchenTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/kitchen')
+    const scheduleNextSpy = vi.spyOn(eventsStore, 'scheduleNext')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper.findAll('[data-test="task-button"]').find((b) => b.text().includes('Cook dinner'))!
+    await button.trigger('click')
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    const sevenDaysChip = wrapper.findAll('[data-test="next-time-chip"]').find((c) => c.text() === '3 days')!
+    await sevenDaysChip.trigger('click')
+    await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
+
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 3)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toContain('Cook dinner logged')
+  })
+
+  it('never opens the sheet for a kid task', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: kidsTasks() }])
+    bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/kids')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    await wrapper.get('[data-test="task-button"]').trigger('click')
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toContain('Put toys away logged')
   })
 
   it('tapping the same chip twice shows a x2 badge, and Undo removes the last event', async () => {
@@ -152,6 +219,28 @@ describe('CategoryScreen', () => {
 
     expect(eventsStore.events.filter((e) => e.type === 'bonus')).toHaveLength(1)
     expect(eventsStore.events.filter((e) => e.type === 'complete')).toHaveLength(6)
+  })
+
+  it('Do all opens the Next time sheet for the parent with the summed points', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: bathroomTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/bathroom')
+    const scheduleNextSpy = vi.spyOn(eventsStore, 'scheduleNext')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    await wrapper.get('[data-test="task-group-do-all"]').trigger('click')
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Clean bathroom logged')
+    // toilet 4 + sink 2 + shower 4 + comboBonus 2 = 12
+    expect(dialog.text()).toContain('+12 pts for Ana.')
+    const sevenDays = wrapper.findAll('[data-test="next-time-chip"]').find((c) => c.text() === '7 days')!
+    expect(sevenDays.attributes('aria-pressed')).toBe('true')
+
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await wrapper.get('[data-test="next-time-schedule"]').trigger('click')
+    expect(scheduleNextSpy).toHaveBeenCalledWith(completeEventId, 7)
   })
 
   it('shows two avatar dots for a task already done today by both adults, and it stays tappable', async () => {

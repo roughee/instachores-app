@@ -264,3 +264,18 @@ for (const id of /** @type {const} */ (['star-catch', 'sparkle-burst'])) {
     console.log(`saved 53-celebration-${id}-${scheme}.png`)
   }
 }
+
+// Issue #69: the Next time sheet, opened after completing Clean bathroom
+// (a combo group's own id, same as `?demoSchedule=1` in main.ts completes
+// directly). `?demoSheet=task-bathroom-clean` (CategoryScreen.vue) runs
+// that one completion through the normal `onComplete` path on mount, so the
+// sheet opens with its 7-day interval preselected, for a deterministic shot.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoSheet=task-bathroom-clean#/log/bathroom`, { waitUntil: 'networkidle' })
+  await page.getByRole('dialog').waitFor()
+  await page.screenshot({ path: `${OUT_DIR}69-next-time-sheet-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 69-next-time-sheet-${scheme}.png`)
+}
