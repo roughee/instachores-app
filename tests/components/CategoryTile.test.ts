@@ -41,4 +41,12 @@ describe('CategoryTile', () => {
     })
     expect(wrapper.get('a').attributes('href')).toContain('/log/laundry')
   })
+
+  it('carries the car category modifier class (issue #63)', () => {
+    const wrapper = mount(CategoryTile, {
+      global: { plugins: [testRouter()] },
+      props: { category: 'car', label: 'Car', icon: PhCookingPot, doneToday: 0, dueDot: false },
+    })
+    expect(wrapper.get('.category-tile').classes()).toContain('category-tile--car')
+  })
 })

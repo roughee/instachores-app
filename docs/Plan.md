@@ -84,6 +84,7 @@ Scale: 1 pt ≈ 5 minutes of tolerable work. Unpleasant or interrupt-heavy tasks
 | Descale coffee machine | 3 | monthly | The one everyone forgets |
 | Clean dishwasher (filter, spray arms, door seal) | 3 | monthly | |
 | Fridge cleanout + wipe | 4 | biweekly | |
+| Clean freezer (defrost + wipe) | 5 | quarterly | |
 | Meal plan for the week | 3 | weekly | Invisible mental load — counts |
 | Grocery shopping (big run) | 5 | weekly | |
 | Put groceries away | 2 | weekly | |
@@ -154,6 +155,7 @@ Group tasks in the app: a task can have `parentId`. The category screen shows th
 | Organize kids' drawings/paintings (keep/photo/recycle) | 3 | monthly |
 | Prep daycare/school bag | 2 | daily |
 | Doctor/daycare admin (appointments, forms) | 3 | as needed |
+| Sort kids' books | 2 | monthly |
 
 ### 🪴 Home & outside
 
@@ -163,7 +165,24 @@ Group tasks in the app: a task can have `parentId`. The category screen shows th
 | Clean balcony | 5 | monthly |
 | Organize storage room | 8 | quarterly |
 | Take out big recycling / bulky waste | 4 | as needed |
+| **Clean windows** (group) | | quarterly |
+| ↳ Balcony windows | 3 | quarterly |
+| ↳ Terrace windows | 3 | quarterly |
+| ↳ Bedroom windows | 2 | quarterly |
+| Sort medicine cabinet | 3 | quarterly |
+| Sort TV table | 2 | monthly |
+| Sort computer table | 2 | monthly |
 | Sort mail, pay bills | 2 | weekly |
+
+**Combo: "Clean windows"** = balcony + terrace + bedroom windows, same day → **+2 bonus**.
+
+### 🚗 Car
+
+| Task | Pts | Freq |
+|---|---|---|
+| Car wash | 5 | monthly |
+| Car carpets (vacuum + wash) | 4 | monthly |
+| Car trunk cleanout | 3 | monthly |
 
 ### ⭐ Kid tasks (5-year-old, star mode)
 
@@ -327,7 +346,7 @@ Each page lists purpose, layout, states, and the acceptance criteria that become
 
 #### `#/log` Log (home)
 - **Purpose**: log a task in two taps.
-- **Layout**: `HouseholdBar` → date + "You today: 14 pts" → **Quick row** (3 learned tasks + Kitchen Reset) → 2-column `CategoryTile` grid (Kitchen, Laundry, Floors, Bathroom, Kids, Home, Admin) → kid star tile.
+- **Layout**: `HouseholdBar` → date + "You today: 14 pts" → **Quick row** (3 learned tasks + Kitchen Reset) → 2-column `CategoryTile` grid (Kitchen, Laundry, Floors, Bathroom, Kids, Home, Admin, Car) → kid star tile.
 - **States**: first day (quick row shows the three seeded defaults: pots, counters, trash); offline (bar still computes from cache, sync dot amber); update available (toast).
 - **Acceptance**: tapping a quick task creates one `complete` event with `points` = task's current points and `forUid` = current user; Undo within 4 s appends an `undo` event; the household bar updates within one frame from local state (no network round-trip).
 
@@ -520,7 +539,7 @@ Swap `SheetsRepo` for a `FirestoreRepo` or `SupabaseRepo` later and nothing abov
 import { z } from 'zod'
 
 export const Id = z.string().min(1).max(128)   // uuid from the app; stable slugs for seeds; combo-{key}-{day}-{hid} for bonuses
-export const Category = z.enum(['kitchen','laundry','floors','bathroom','kids','home','admin','kid'])
+export const Category = z.enum(['kitchen','laundry','floors','bathroom','kids','home','admin','car','kid'])
 export const Freq = z.enum(['daily','weekly','biweekly','monthly','quarterly','adhoc'])
 
 export const Member = z.object({

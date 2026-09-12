@@ -70,6 +70,7 @@ Secondary system. Each has a `-soft` tint for tile backgrounds.
 | Kids | `--cat-kids` | `#C9508C` | `#EA84B6` |
 | Home | `--cat-home` | `#539232` | `#8FC96C` |
 | Admin | `--cat-admin` | `#6B6F7A` | `#A0A4AE` |
+| Car | `--cat-car` | `#8B5E34` | `#D4A276` |
 
 Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) that runs WCAG contrast math over the token file: every text token on every surface >= 4.5:1, every category color on its own `-soft` tint >= 3:1 (large text / icon threshold).
 
@@ -98,6 +99,7 @@ Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) 
   --cat-kids: #C9508C;
   --cat-home: #539232;
   --cat-admin: #6B6F7A;
+  --cat-car: #8B5E34;
 
   --radius-card: 16px;
   --radius-button: 12px;
@@ -134,6 +136,7 @@ Contrast is checked in CI with a small Vitest (`tests/tokens/contrast.test.ts`) 
   --cat-kids: #EA84B6;
   --cat-home: #8FC96C;
   --cat-admin: #A0A4AE;
+  --cat-car: #D4A276;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -154,7 +157,7 @@ The `-soft` category tints are derived in CSS (`color-mix(in oklab, var(--cat-ki
 - **Shape**: cards 16 px, buttons 12 px, chips 999 px, bottom sheet top corners 28 px (Material 3 sheet).
 - **Elevation**: none in light except the bottom bar and sheets (one soft shadow). Dark uses surface tiers instead of shadows.
 - **Motion**: 120 ms ease-out for presses, 200 ms for sheet open, points count-up on the household bar (300 ms). All animations gated by `prefers-reduced-motion`. No idle animation anywhere.
-- **Icons**: `@phosphor-icons/vue`, weight `regular`, size 24 (20 in chips). One family; no hand-drawn SVG icons; no emoji as icons. Category glyphs: `CookingPot`, `TShirt`, `Broom`, `Bathtub`, `Baby`, `Plant`, `Notepad`, `Star`.
+- **Icons**: `@phosphor-icons/vue`, weight `regular`, size 24 (20 in chips). One family; no hand-drawn SVG icons; no emoji as icons. Category glyphs: `CookingPot`, `TShirt`, `Broom`, `Bathtub`, `Baby`, `Plant`, `Notepad`, `Car`, `Star`.
 - **Copy**: short, no exclamation marks, no em-dashes or en-dashes in UI strings (Taste Skill §9.G), verbs first ("Log pots", not "Pots logged successfully!").
 
 ## 5. Core components

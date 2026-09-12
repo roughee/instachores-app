@@ -168,4 +168,9 @@ const icon = computed(() => categoryIcon(props.category))
   background: var(--cat-admin-soft);
   color: var(--cat-admin);
 }
+
+.schedule-row--car .schedule-row__icon {
+  background: var(--cat-car-soft);
+  color: var(--cat-car);
+}
 </style>

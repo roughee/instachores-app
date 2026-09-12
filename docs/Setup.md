@@ -54,6 +54,45 @@ Existing rows read fine either way: a blank cell parses as absent (no
 `intervalDays` on an old task, no `dueAt`/`days` on an old event), the same
 as any other optional column.
 
+## Adding new catalog rows to an existing sheet
+
+Issue #63 added twelve rows to `src/domain/seed.ts`'s `ROWS` (a window-cleaning
+group, a freezer task, a few sort/organize tasks, and the new `car` category
+with its three tasks) and a `car` category to `Category`. `seed` only ever
+fills a completely empty `tasks`/`rewards` pair (`apps-script/Code.js`'s
+`seed` function checks `readTable(...).objects.length > 0` on both tabs and
+throws `invalid` -- "tasks and rewards must be empty to seed" -- if either
+already has a row); it never appends to a sheet that already has rows, so
+there is no risk of it duplicating the twelve rows onto a household that was
+seeded before this change, and this ticket leaves that refusal exactly as it
+is. There is also no CLI subcommand for adding a handful of rows (`seed` is
+the only write path `scripts/household.ts` exposes for `tasks`, and it is
+all-or-nothing). So an already-seeded household adds these by hand, once:
+
+1. Open the household spreadsheet's `tasks` tab.
+2. Copy the fourteen columns' worth of values below into new rows at the
+   bottom of the tab, one task per row, matching the tab's existing column
+   order (`v`, `id`, `name`, `category`, `points`, `freq`, `forRole`,
+   `parentId`, `comboBonus`, `intervalDays`, `archived`, `sort`, `updatedAt`,
+   `updatedBy`) -- read straight off `src/domain/seed.ts`'s new `ROWS`
+   entries (`task-home-windows` through `task-car-trunk`) so the values stay
+   byte-for-byte what a fresh seed would have sent. Leave `forRole`,
+   `parentId` and `comboBonus` blank except where `seed.ts` sets them (the
+   three window sub-items' `parentId` is `task-home-windows`; that parent's
+   own `comboBonus` is `2` and `intervalDays` is `90`). `sort` only orders
+   tasks within their own category, so any number after the existing rows in
+   that category is fine; it does not need to match `seed.ts`'s array index.
+3. Set `archived` to `FALSE`, `updatedAt` to the current time (ISO 8601, for
+   example `2026-09-12T00:00:00.000Z`), and `updatedBy` to whichever member
+   slug is adding the rows.
+4. Format the new cells as plain text (select the rows, **Format > Number >
+   Plain text**), matching every other row on the tab -- otherwise Sheets can
+   silently reformat an id like `task-home-windows` or an ISO timestamp.
+
+Existing rows and the app itself need no change: `car` is just another value
+of the same `category` column, and the app's own catalog already carries the
+`car` category, its grid tile and its colors from this ticket.
+
 ## Redeploying the script
 
 Do this whenever `apps-script/Code.js` or `apps-script/appsscript.json` changes. Two partners approving the change, per `docs/Architecture.md` §10, applies here.

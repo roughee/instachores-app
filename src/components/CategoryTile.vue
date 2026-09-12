@@ -119,4 +119,9 @@ defineProps<{
   background: var(--cat-admin-soft);
   color: var(--cat-admin);
 }
+
+.category-tile--car .category-tile__icon {
+  background: var(--cat-car-soft);
+  color: var(--cat-car);
+}
 </style>

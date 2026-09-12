@@ -4,11 +4,11 @@
  * domain is pure TypeScript, no icon components) and out of any one screen
  * so `CategoryTile` and `TaskButton` share the same mapping.
  */
-import { PhBaby, PhBathtub, PhBroom, PhCookingPot, PhNotepad, PhPlant, PhTShirt } from '@phosphor-icons/vue'
+import { PhBaby, PhBathtub, PhBroom, PhCar, PhCookingPot, PhNotepad, PhPlant, PhTShirt } from '@phosphor-icons/vue'
 import type { Component } from 'vue'
 import type { Category } from '@/schemas'
 
-/** The seven categories shown as tiles on the Log screen (Plan §5.5); the
+/** The eight categories shown as tiles on the Log screen (Plan §5.5); the
  * kid star board (`kid` category) has its own screen, not this grid. */
 export const GRID_CATEGORIES: readonly Category[] = [
   'kitchen',
@@ -18,6 +18,7 @@ export const GRID_CATEGORIES: readonly Category[] = [
   'kids',
   'home',
   'admin',
+  'car',
 ]
 
 const LABELS: Partial<Record<Category, string>> = {
@@ -28,6 +29,7 @@ const LABELS: Partial<Record<Category, string>> = {
   kids: 'Kids',
   home: 'Home',
   admin: 'Admin',
+  car: 'Car',
 }
 
 const ICONS: Partial<Record<Category, Component>> = {
@@ -38,6 +40,7 @@ const ICONS: Partial<Record<Category, Component>> = {
   kids: PhBaby,
   home: PhPlant,
   admin: PhNotepad,
+  car: PhCar,
 }
 
 /** DESIGN.md §3 category tokens, as CSS `var()` references -- never a
@@ -50,6 +53,7 @@ const COLOR_VARS: Partial<Record<Category, string>> = {
   kids: 'var(--cat-kids)',
   home: 'var(--cat-home)',
   admin: 'var(--cat-admin)',
+  car: 'var(--cat-car)',
 }
 
 export function categoryLabel(category: Category): string {
