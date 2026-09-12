@@ -92,6 +92,33 @@ function kidsTasks() {
   return [task({ id: 'task-kid-star', name: 'Put toys away', category: 'kids', points: 1, forRole: 'kid' })]
 }
 
+function floorsTasks() {
+  return [
+    task({ id: 'task-pick-up', name: 'Pick everything up off the floor', category: 'floors', points: 3, sort: 0 }),
+    task({
+      id: 'task-mop',
+      name: 'Wet-mop floors',
+      category: 'floors',
+      points: 5,
+      freq: 'weekly',
+      intervalDays: 5,
+      sort: 1,
+    }),
+    task({
+      id: 'task-vacuum',
+      name: 'Vacuum whole home',
+      category: 'floors',
+      points: 5,
+      freq: 'weekly',
+      intervalDays: 3,
+      sort: 2,
+    }),
+    task({ id: 'task-dust', name: 'Dust shelves and surfaces', category: 'floors', points: 3, sort: 3 }),
+  ]
+}
+
+const DAY_MS = 86_400_000
+
 describe('CategoryScreen', () => {
   it('renders a TaskGroup for a group task and TaskButtons for the rest, in sort order', async () => {
     const repo = new MemoryRepo([{ id: HID, household: household(), tasks: kitchenTasks() }])
@@ -282,5 +309,129 @@ describe('CategoryScreen', () => {
 
     expect(wrapper.text()).toContain('No such category')
     expect(wrapper.get('a').attributes('href')).toContain('/log')
+  })
+
+  it('an away task leaves the main list, shows in the Scheduled fold with a back label, and tapping it unschedules and toasts', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    await eventsStore.complete('task-vacuum')
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await eventsStore.scheduleNext(completeEventId!, 7)
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+
+    expect(wrapper.findAll('[data-test="task-button"]').some((b) => b.text().includes('Vacuum whole home'))).toBe(false)
+    const rows = wrapper.findAll('[data-test="scheduled-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.text()).toContain('Vacuum whole home')
+    expect(rows[0]!.text()).toMatch(/back /)
+    expect(wrapper.text()).toContain('Tap a scheduled task to bring it back early.')
+
+    await rows[0]!.trigger('click')
+
+    expect(eventsStore.events.some((e) => e.type === 'unschedule')).toBe(true)
+    expect(wrapper.get('[role="status"]').text()).toContain('Vacuum whole home is back')
+  })
+
+  it('an away group parent folds as one row instead of its children', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: bathroomTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/bathroom')
+
+    // Direct complete on the parent id (same as main.ts's `?demoSchedule=1`
+    // flow), not "Do all": which sub-item's own complete a real "Do all"
+    // schedules against is an existing #69 nuance, out of scope here.
+    await eventsStore.complete('task-bathroom')
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await eventsStore.scheduleNext(completeEventId!, 7)
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+
+    expect(wrapper.find('[data-test="task-group-do-all"]').exists()).toBe(false)
+    const rows = wrapper.findAll('[data-test="scheduled-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.text()).toContain('Clean bathroom')
+  })
+
+  it('a task due today shows its subline with no chip (mockup: gentle, not nagging)', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    await eventsStore.complete('task-mop', { at: new Date(clock.getTime() - 5 * DAY_MS) })
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await eventsStore.scheduleNext(completeEventId!, 5)
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper.findAll('[data-test="task-button"]').find((b) => b.text().includes('Wet-mop floors'))!
+
+    expect(button.find('.task-button__due').exists()).toBe(false)
+    expect(button.get('.task-button__subline').text()).toBe('Due today. Last done 5 days ago by Ana')
+  })
+
+  it('an overdue task shows the Due <weekday> chip and its subline', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    // Completed 9 days ago with a 5-day schedule: due 4 days ago (Sat), overdue as of NOW (Wed).
+    await eventsStore.complete('task-mop', { at: new Date(clock.getTime() - 9 * DAY_MS) })
+    const completeEventId = eventsStore.recentlyLogged?.eventId
+    await eventsStore.scheduleNext(completeEventId!, 5)
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper.findAll('[data-test="task-button"]').find((b) => b.text().includes('Wet-mop floors'))!
+
+    expect(button.get('.task-button__due').text()).toBe('Due Sat')
+    expect(button.get('.task-button__subline').text()).toBe('Due since Sat. Last done 9 days ago by Ana')
+  })
+
+  it('a listed task with a last completion shows the subline only, no chip', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    const { eventsStore } = bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    await eventsStore.complete('task-dust', { at: new Date(clock.getTime() - 2 * DAY_MS) })
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper
+      .findAll('[data-test="task-button"]')
+      .find((b) => b.text().includes('Dust shelves and surfaces'))!
+
+    expect(button.get('.task-button__subline').text()).toBe('Last done 2 days ago by Ana')
+    expect(button.find('.task-button__due').exists()).toBe(false)
+  })
+
+  it('a never-done listed task shows no subline and no chip', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+    const button = wrapper
+      .findAll('[data-test="task-button"]')
+      .find((b) => b.text().includes('Pick everything up off the floor'))!
+
+    expect(button.find('.task-button__subline').exists()).toBe(false)
+    expect(button.find('.task-button__due').exists()).toBe(false)
+  })
+
+  it('shows no Scheduled fold when nothing in the category is away', async () => {
+    const repo = new MemoryRepo([{ id: HID, household: household(), tasks: floorsTasks() }])
+    bindAll(repo, () => clock)
+    useSessionStore().memberUid = ANA
+    const router = await testRouter('/log/floors')
+
+    const wrapper = mount(CategoryScreen, { global: { plugins: [router] } })
+
+    expect(wrapper.find('.category-screen__scheduled').exists()).toBe(false)
   })
 })

@@ -21,10 +21,19 @@
  * deterministic x2 badge without scripting real taps. `?demoSheet=<taskId>`
  * (issue #69) similarly completes one task through the normal `onComplete`
  * path so its Next time sheet opens, for a deterministic sheet screenshot.
+ *
+ * Away tasks (issue #70, Plan §5.5 "States"): a top-level task (plain or a
+ * `TaskGroup`'s parent) whose `eventsStore.schedule` entry is `'away'`
+ * leaves `visibleItems` and instead renders as one row in the "Scheduled"
+ * fold below the list -- a group's away parent folds as a single row, its
+ * children never explode into the fold. Tapping a fold row calls
+ * `eventsStore.unschedule` (bring back early) and toasts, no Undo action.
+ * A listed or due item's `TaskButton` gets its subline/Due chip from
+ * `taskRowCopy` (`src/domain/scheduleCopy.ts`), keyed by task id.
  */
 import { computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { PhTag } from '@phosphor-icons/vue'
+import { PhCalendarBlank, PhTag } from '@phosphor-icons/vue'
 import EmptyState from '@/components/EmptyState.vue'
 import NextTimeSheet from '@/components/NextTimeSheet.vue'
 import TaskButton from '@/components/TaskButton.vue'
@@ -37,11 +46,13 @@ import { useHaptic } from '@/composables/useHaptic'
 import { useNextTimeSheet } from '@/composables/useNextTimeSheet'
 import { useToast } from '@/composables/useToast'
 import type { ShowToastOptions } from '@/composables/useToast'
+import { scheduledBackLabel, taskRowCopy } from '@/domain/scheduleCopy'
 import { Category } from '@/schemas'
 import type { Member, Task } from '@/schemas'
 import { useCatalogStore } from '@/stores/catalog'
 import { useEventsStore } from '@/stores/events'
 import { useHouseholdStore } from '@/stores/household'
+import { getSessionOptions } from '@/stores/sessionOptions'
 
 const route = useRoute()
 const catalogStore = useCatalogStore()
@@ -75,6 +86,58 @@ const items = computed<ListItem[]>(() => {
   })
   return out.sort((a, b) => a.sort - b.sort)
 })
+
+/** The top-level task an item's schedule state is checked against: the
+ * task itself for a plain button, the parent for a group (issue #70). */
+function scheduleTaskFor(item: ListItem): Task {
+  return item.kind === 'button' ? item.task : item.parent
+}
+
+/** `items` minus any top-level task or group parent that is away (Plan
+ * §5.5 "States"): those render in the Scheduled fold instead. */
+const visibleItems = computed<ListItem[]>(() =>
+  items.value.filter((item) => eventsStore.schedule.get(scheduleTaskFor(item).id)?.state !== 'away'),
+)
+
+interface AwayItem {
+  task: Task
+  dueAt: Date
+}
+
+/** One row per away top-level task or group parent, in list order -- a
+ * group's children never appear here on their own (issue #70). */
+const awayItems = computed<AwayItem[]>(() => {
+  const out: AwayItem[] = []
+  for (const item of items.value) {
+    const task = scheduleTaskFor(item)
+    const s = eventsStore.schedule.get(task.id)
+    if (s?.state === 'away' && s.dueAt !== undefined) out.push({ task, dueAt: s.dueAt })
+  }
+  return out
+})
+
+/** `TaskButton`'s subline/Due chip for every plain button task (DESIGN.md's
+ * TaskButton, `src/domain/scheduleCopy.ts`): empty for a group item, which
+ * gets no chip/subline of its own. */
+const taskRowCopyById = computed<Map<string, { subline?: string; due?: string }>>(() => {
+  const map = new Map<string, { subline?: string; due?: string }>()
+  const household = householdStore.household
+  if (!household) return map
+  const now = getSessionOptions().now()
+  for (const item of items.value) {
+    if (item.kind !== 'button') continue
+    const s = eventsStore.schedule.get(item.task.id)
+    if (s) map.set(item.task.id, taskRowCopy(s, household, now, household.tz))
+  }
+  return map
+})
+
+/** The Scheduled fold's "back <day>" for one away item. */
+function backLabel(dueAt: Date): string {
+  const household = householdStore.household
+  if (!household) return ''
+  return scheduledBackLabel(dueAt, getSessionOptions().now(), household.tz)
+}
 
 /** `eventsStore.doneTodayByTask` gives uids; `TaskButton` wants the
  * `Member` for each, so this is the one place that resolves them. */
@@ -214,6 +277,16 @@ function onToastAction(): void {
   dismiss()
 }
 
+/** Bring-back-early (Plan §5.5 "States"): unschedules the task and toasts,
+ * no Undo action -- scheduling it again is one tap on its own TaskButton
+ * once "Next time?" opens for it. */
+async function onBringBack(task: Task): Promise<void> {
+  tick()
+  const pending = eventsStore.unschedule(task.id)
+  show({ message: `${task.name} is back` })
+  await pending
+}
+
 onMounted(async () => {
   if (hasFlag('demoComplete')) {
     const raw = flagValue('demoComplete') ?? ''
@@ -249,12 +322,13 @@ onMounted(async () => {
         <h1 class="category-screen__header-label">{{ categoryLabel(category.data) }}</h1>
       </header>
 
-      <div v-if="items.length > 0" class="category-screen__list">
-        <template v-for="item in items" :key="item.kind === 'button' ? item.task.id : item.parent.id">
+      <div v-if="visibleItems.length > 0" class="category-screen__list">
+        <template v-for="item in visibleItems" :key="item.kind === 'button' ? item.task.id : item.parent.id">
           <TaskButton
             v-if="item.kind === 'button'"
             :task="item.task"
             :done-by="doneTodayByTaskMembers.get(item.task.id) ?? []"
+            v-bind="taskRowCopyById.get(item.task.id) ?? {}"
             @complete="onComplete(item.task.id)"
           />
           <TaskGroup
@@ -268,9 +342,35 @@ onMounted(async () => {
         </template>
       </div>
 
-      <EmptyState v-else :icon="PhTag" :label="`No tasks in ${categoryLabel(category.data)} yet.`">
+      <EmptyState
+        v-else-if="items.length === 0"
+        :icon="PhTag"
+        :label="`No tasks in ${categoryLabel(category.data)} yet.`"
+      >
         <RouterLink to="/log" class="category-screen__empty-action">Go to Log</RouterLink>
       </EmptyState>
+
+      <section v-if="awayItems.length > 0" class="category-screen__scheduled">
+        <h2 class="category-screen__scheduled-header">Scheduled</h2>
+        <button
+          v-for="item in awayItems"
+          :key="item.task.id"
+          type="button"
+          class="category-screen__scheduled-row"
+          data-test="scheduled-row"
+          @click="onBringBack(item.task)"
+        >
+          <span class="category-screen__scheduled-icon">
+            <component :is="categoryIcon(item.task.category)" :size="24" weight="regular" aria-hidden="true" />
+          </span>
+          <span class="category-screen__scheduled-name">{{ item.task.name }}</span>
+          <span class="category-screen__scheduled-back">
+            <PhCalendarBlank :size="16" weight="regular" aria-hidden="true" />
+            {{ backLabel(item.dueAt) }}
+          </span>
+        </button>
+        <p class="category-screen__scheduled-hint">Tap a scheduled task to bring it back early.</p>
+      </section>
     </template>
 
     <EmptyState v-else :icon="PhTag" label="No such category.">
@@ -402,5 +502,68 @@ onMounted(async () => {
   color: var(--on-primary);
   font-weight: 600;
   text-decoration: none;
+}
+
+.category-screen__scheduled {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-screen__scheduled-header {
+  margin: 0;
+  padding: var(--list-gap) 0;
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.category-screen__scheduled-row {
+  display: flex;
+  min-height: var(--touch);
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 4px var(--card-pad);
+  border: none;
+  border-radius: var(--radius-button);
+  background: none;
+  color: var(--text-2);
+  text-align: left;
+}
+
+.category-screen__scheduled-icon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-button);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.category-screen__scheduled-name {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.category-screen__scheduled-back {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+}
+
+.category-screen__scheduled-hint {
+  margin: 4px var(--card-pad) 0;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
 }
 </style>
