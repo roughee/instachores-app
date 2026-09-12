@@ -61,13 +61,17 @@ app.mount('#app')
  * this only resumes a session that already exists, so a refresh does not
  * drop back to Welcome.
  *
- * `?demoSchedule=1` (issue #68) additionally puts three Schedule-tab tasks
- * through "Next time?" for deterministic Schedule screenshots: Clean
- * bathroom and Vacuum whole home get a fresh completion followed by a 3-day
- * and a 7-day schedule (both land `away`); Wet-mop floors is completed 5
- * days ago (through `complete`'s own `opts.at` backdating, same path as a
- * real backdated log) with a 5-day schedule, so its due day is today. Dev
- * only, like the flags above.
+ * `?demoSchedule=1` (issue #68) additionally puts four Schedule-tab tasks
+ * through "Next time?" for deterministic Schedule and Category screenshots:
+ * Clean bathroom and Vacuum whole home get a fresh completion followed by a
+ * 3-day and a 7-day schedule (both land `away`); Wet-mop floors is
+ * completed 5 days ago (through `complete`'s own `opts.at` backdating, same
+ * path as a real backdated log) with a 5-day schedule, so its due day is
+ * today; Vacuum one room gets a fresh completion and a 1-day schedule, so
+ * it folds with "back tomorrow" next to Vacuum whole home's "back <day>"
+ * (issue #70's Floors category screenshot, matching
+ * `docs/design/schedule/category-scheduled-light.png`'s two folded rows).
+ * Dev only, like the flags above.
  *
  * `?demoSheet=<taskId>` (issue #69, `CategoryScreen.vue`, read with
  * `flagValue`): on mount, completes that one task through the same
@@ -97,6 +101,7 @@ async function boot(): Promise<void> {
     await scheduleAfterCompleting(SEED_IDS.cleanBathroom, 3)
     await scheduleAfterCompleting(SEED_IDS.vacuumAll, 7)
     await scheduleAfterCompleting(SEED_IDS.mop, 5, { at: new Date(Date.now() - 5 * DAY_MS) })
+    await scheduleAfterCompleting(SEED_IDS.vacuumRoom, 1)
   }
   if (params.get('forceOffline') === '1') {
     useSyncStore().$patch({ online: false, outboxCount: Number(params.get('demoOutbox') ?? '3') })

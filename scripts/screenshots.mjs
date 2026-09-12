@@ -279,3 +279,19 @@ for (const scheme of /** @type {const} */ (['light', 'dark'])) {
   await browser.close()
   console.log(`saved 69-next-time-sheet-${scheme}.png`)
 }
+
+// Issue #70: Floors category with a due task (Wet-mop floors, "Due today."
+// subline, no chip -- matches
+// docs/design/schedule/category-scheduled-light.png), a last-done subline
+// with no chip (Dust shelves and surfaces), and the Scheduled fold with two
+// folded rows (Vacuum whole home "back <weekday> <day>", Vacuum one room
+// "back tomorrow"). `?demoSchedule=1` (main.ts) schedules all four.
+for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+  const browser = await chromium.launch({ executablePath })
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme })
+  await page.goto(`${BASE_URL}?demo=1&demoSchedule=1#/log/floors`, { waitUntil: 'networkidle' })
+  await page.getByRole('heading', { name: 'Scheduled' }).waitFor()
+  await page.screenshot({ path: `${OUT_DIR}70-category-scheduled-${scheme}.png` })
+  await browser.close()
+  console.log(`saved 70-category-scheduled-${scheme}.png`)
+}
