@@ -224,7 +224,18 @@ onMounted(async () => {
     for (const taskId of taskIds) await eventsStore.complete(taskId)
   }
   const demoSheetTaskId = flagValue('demoSheet')
-  if (demoSheetTaskId) await onComplete(demoSheetTaskId)
+  if (demoSheetTaskId) {
+    // A group parent goes through "Do all", the same path a real tap takes,
+    // so the sheet shows the summed points rather than the parent's own 0.
+    const parent = catalogStore.byId.get(demoSheetTaskId)
+    const children = catalogStore.tasks.filter((t) => t.parentId === demoSheetTaskId && !t.archived)
+    if (parent && children.length > 0) {
+      await onCompleteAll(
+        children.map((c) => c.id),
+        parent,
+      )
+    } else await onComplete(demoSheetTaskId)
+  }
 })
 </script>
 
