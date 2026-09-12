@@ -161,7 +161,7 @@ The `-soft` category tints are derived in CSS (`color-mix(in oklab, var(--cat-ki
 
 | Component | Behaviour |
 |---|---|
-| `AppShell` | Bottom tab bar (Log, Today, Overview, Rewards), center FAB "Kitchen Reset", top status strip (sync dot, update toast). Safe-area aware. |
+| `AppShell` | Bottom tab bar (Log, Today, Schedule, Overview; Rewards moves into the Overview header in Phase 2, see issue #64), center FAB "Kitchen Reset", top status strip (sync dot, update toast). Safe-area aware. |
 | `HouseholdBar` | Single rounded bar, `--primary` fill, "187 / 250" in tabular numerals, tap to expand into member split. |
 | `CategoryTile` | 2-column grid tile; category color icon on `-soft` tint; count of tasks done today as small avatars in the corner. |
 | `TaskButton` | Full-width 56 px button: icon, name, points chip. Press: haptic + toast with Undo. Long-press: sheet (log for partner / kid, backdate, add note). Shows avatar dots for completions today. |
@@ -172,8 +172,10 @@ The `-soft` category tints are derived in CSS (`color-mix(in oklab, var(--cat-ki
 | `RewardCard` | Name, cost in `--points`, commitment text, Claim button (disabled with reason if balance is short). |
 | `Sheet` | Bottom sheet, 28 px top radius, drag handle, scrim. Used for every secondary action so the main screens stay two-tap. |
 | `EmptyState` | Icon + one sentence + one action. Never a blank screen. |
+| `NextTimeSheet` | The `Sheet` shown after a completion (issue #64): check icon, "<task> logged" with points and last-done line, interval chips (the task's own interval preselected, `--primary-soft` fill with a 2 px `--primary` border), "Schedule for <day>" primary button beside "Not now". Mockups in `docs/design/schedule/`. |
+| `ScheduleRow` | Schedule-tab row: category icon on its `-soft` tint, task name over "N days ago · who", points in `--points`, due chip (`--warn` on a 14% tint when due, `--surface-2` otherwise). Scheduled tasks on a Category screen render as a muted fold with a calendar glyph and "back Tue 15". |
 
-Screens, their layouts, states and acceptance criteria are in `docs/Plan.md` §5.5. Routes are hash routes (`#/log`, `#/today`, `#/overview`, `#/rewards`, `#/kid`, `#/settings`, `#/welcome`).
+Screens, their layouts, states and acceptance criteria are in `docs/Plan.md` §5.5. Routes are hash routes (`#/log`, `#/today`, `#/schedule`, `#/overview`, `#/rewards`, `#/kid`, `#/settings`, `#/welcome`).
 
 ## 6. Dark mode protocol
 
