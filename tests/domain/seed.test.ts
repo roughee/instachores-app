@@ -166,3 +166,60 @@ describe('seed catalog: issue #63 rows', () => {
     }
   })
 })
+
+describe('seed catalog: issue #81 rows', () => {
+  it('adds Make breakfast and Make lunch to the kitchen catalog, daily', () => {
+    const breakfast = byId(SEED_IDS.makeBreakfast)
+    const lunch = byId(SEED_IDS.makeLunch)
+
+    expect(breakfast.name).toBe('Make breakfast')
+    expect(breakfast.category).toBe('kitchen')
+    expect(breakfast.points).toBe(3)
+    expect(breakfast.freq).toBe('daily')
+
+    expect(lunch.name).toBe('Make lunch')
+    expect(lunch.category).toBe('kitchen')
+    expect(lunch.points).toBe(4)
+    expect(lunch.freq).toBe('daily')
+  })
+
+  it('adds Make baby food to kids, weekly, with a 4-day interval', () => {
+    const t = byId(SEED_IDS.babyFood)
+    expect(t.name).toBe('Make baby food')
+    expect(t.category).toBe('kids')
+    expect(t.points).toBe(4)
+    expect(t.freq).toBe('weekly')
+    expect(t.intervalDays).toBe(4)
+    expect(t.parentId).toBeUndefined()
+  })
+
+  it('adds Wash baby food containers + gear to kids, daily', () => {
+    const t = byId(SEED_IDS.babyFoodGear)
+    expect(t.name).toBe('Wash baby food containers + gear')
+    expect(t.category).toBe('kids')
+    expect(t.points).toBe(2)
+    expect(t.freq).toBe('daily')
+  })
+
+  it('adds exactly four new rows, none duplicating an existing task name', () => {
+    const newIds = [SEED_IDS.makeBreakfast, SEED_IDS.makeLunch, SEED_IDS.babyFood, SEED_IDS.babyFoodGear]
+    expect(newIds).toHaveLength(4)
+    expect(new Set(newIds).size).toBe(4)
+
+    const all = tasks()
+    const names = all.map((t) => t.name)
+    expect(new Set(names).size).toBe(names.length)
+
+    // Distinct from the existing baby-adjacent rows already in the catalog.
+    expect(names).toContain('Wash baby bottles / pump parts')
+    expect(names).toContain('Bath the kids')
+    expect(names).toContain('Night feed / wake-up')
+  })
+
+  it('every new id actually resolves to a seeded task', () => {
+    const ids = new Set(tasks().map((t) => t.id))
+    for (const id of [SEED_IDS.makeBreakfast, SEED_IDS.makeLunch, SEED_IDS.babyFood, SEED_IDS.babyFoodGear]) {
+      expect(ids.has(id)).toBe(true)
+    }
+  })
+})

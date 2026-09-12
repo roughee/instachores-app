@@ -93,6 +93,28 @@ Existing rows and the app itself need no change: `car` is just another value
 of the same `category` column, and the app's own catalog already carries the
 `car` category, its grid tile and its colors from this ticket.
 
+Issue #81 added four more rows to the same `ROWS` array, no new `Category`
+value this time: Make breakfast and Make lunch (`kitchen`), and Make baby food
+and Wash baby food containers + gear (`kids`). The same refusal-to-append
+behavior applies, so an already-seeded household adds these four the same
+way:
+
+1. Open the household spreadsheet's `tasks` tab.
+2. Copy the fourteen columns' worth of values for `task-kitchen-make-breakfast`,
+   `task-kitchen-make-lunch`, `task-kids-baby-food` and
+   `task-kids-baby-food-gear` into new rows at the bottom of the tab, one task
+   per row, matching the tab's existing column order -- read straight off
+   `src/domain/seed.ts`'s `ROWS` entries for those four ids so the values stay
+   byte-for-byte what a fresh seed would have sent. Leave `forRole` and
+   `comboBonus` blank; `task-kids-baby-food` is the only one of the four with
+   an `intervalDays` (`4`), and none of the four has a `parentId`.
+3. Set `archived` to `FALSE`, `updatedAt` to the current time (ISO 8601, for
+   example `2026-09-12T00:00:00.000Z`), and `updatedBy` to whichever member
+   slug is adding the rows.
+4. Format the new cells as plain text (select the rows, **Format > Number >
+   Plain text**), matching every other row on the tab -- otherwise Sheets can
+   silently reformat an id like `task-kids-baby-food` or an ISO timestamp.
+
 ## Redeploying the script
 
 Do this whenever `apps-script/Code.js` or `apps-script/appsscript.json` changes. Two partners approving the change, per `docs/Architecture.md` §10, applies here.
