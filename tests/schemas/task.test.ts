@@ -69,4 +69,16 @@ describe('Task schema', () => {
     const t = Task.parse({ ...valid, parentId: 'task-0', comboBonus: 2 })
     expect(Task.parse(JSON.parse(JSON.stringify(t)))).toEqual(t)
   })
+
+  it('accepts an optional intervalDays between 1 and 365, coerced from a sheet cell', () => {
+    expect(Task.parse({ ...valid, intervalDays: 7 }).intervalDays).toBe(7)
+    expect(Task.parse({ ...valid, intervalDays: '7' }).intervalDays).toBe(7)
+    expect(Task.parse({ ...valid, intervalDays: '' }).intervalDays).toBeUndefined()
+    expect(Task.parse(valid).intervalDays).toBeUndefined()
+  })
+
+  it('rejects an intervalDays outside 1 to 365', () => {
+    expect(Task.safeParse({ ...valid, intervalDays: 0 }).success).toBe(false)
+    expect(Task.safeParse({ ...valid, intervalDays: 366 }).success).toBe(false)
+  })
 })

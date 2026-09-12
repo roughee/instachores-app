@@ -111,8 +111,22 @@ How many days in a row, ending today or yesterday, the counters task has been lo
 _Avoid_: combo (a combo is same-day; a streak is consecutive days)
 
 **Due**:
-A task is due when it was done before and its frequency's window has elapsed since; a task that was never logged is not due. In code: `isDue()` in `domain/schedule.ts`, surfaced as `Derived.dueDots`.
+A task is due when it was done before and its frequency's window has elapsed since; a task that was never logged is not due. In code: `isDue()` in `domain/schedule.ts`, surfaced as `Derived.dueDots`. A task that was **scheduled** is also due, in the same sense, once the household-local day it named has arrived; it returns to its list with a Due chip, and stays due if the day has since passed. In code: `TaskSchedule.state === 'due'` from `deriveSchedule()`.
 _Avoid_: overdue, late (due is a gentle nudge, not a nag)
+
+### Scheduling
+
+**Interval**:
+How many days after finishing a task it should come back around: the number the "Next time?" sheet preselects when a completion has an interval. In code: `Task.intervalDays` (optional, 1 to 365), falling back to a default per `freq` through `suggestedIntervalDays()` in `domain/schedule.ts`; an ad hoc task with neither has none.
+_Avoid_: frequency (`freq` is the task's category of recurrence, daily/weekly/…; interval is the specific day count picked on top of it), period
+
+**Scheduled**:
+A task that has picked its next time on the "Next time?" sheet, appending a `schedule` event that names the completion it follows and the day it falls due. In code: `ChoreEvent` with `type: 'schedule'`, `taskId`, `refEventId`, `dueAt`, `days`; "bring it back early" appends an `unschedule` naming the `schedule` event instead.
+_Avoid_: snoozed, deferred
+
+**Away**:
+How a scheduled task is described before its due day: hidden from its category list, the quick row's learning and the Log due dots, folded under a muted "Scheduled" row on its category. In code: `TaskSchedule.state === 'away'` from `deriveSchedule()` in `domain/schedule.ts`.
+_Avoid_: hidden, snoozed
 
 ### Sync and offline
 
@@ -158,6 +172,7 @@ _Avoid_: sandbox, test mode
 - A **combo** (including the **Kitchen Reset**) watches a set of tasks; when they are all done the same day it produces a **bonus** event.
 - **Undo**, **kudos**, **ack** and **decline** all reference an earlier event by `refEventId`; none of them edit or remove what they reference.
 - A **claim** turns into either an **ack** (points leave the claimant's **balance**, or the **pooled** balance) or a **decline** (nothing changes).
+- A **complete** with an **interval** can be followed by a `schedule` event, making the task **scheduled**: **away** until its named day, then **due**; an `unschedule` or an undo of that completion drops it back to unscheduled.
 - The **outbox** holds writes not yet on the **sheet**; the **snapshot** holds the last-known read from it, advanced by the **cursor**.
 - A phone joins a **household** with a **setup link**, which carries the **script**'s URL and the household **secret**; **demo mode** needs none of the three.
 
@@ -165,4 +180,5 @@ _Avoid_: sandbox, test mode
 
 - **"Sheet" is overloaded.** The Google Sheet (the database) and `Sheet` (the bottom-sheet UI component used for secondary actions, per Plan §5.4) share a name by coincidence. This glossary reserves "sheet" for the database; the UI component should be called "bottom sheet" in conversation to keep the two apart.
 - **"Clap" vs "kudos."** The Today screen's button is labelled "clap" (Plan §5.5); the event it creates is `type: 'kudos'`. Both names are in active use for the same action; this glossary treats kudos as canonical and clap as the button's copy.
+- **"Due" names two mechanisms.** `isDue()`/`dueDots` (a category lights up once a task's frequency window has elapsed) and `deriveSchedule()`'s per-task `due` state (a task that was explicitly scheduled has reached its named day) both use the same word for the same feeling, on purpose, but are separate code paths as of issue #66; a later ticket has due dots respect a task that is `away`.
 - **"Partner" is not a schema word.** Both partners say "my partner" constantly in conversation, and it is the right word there, but the schema only knows "adult." Nothing to fix, just worth knowing the two vocabularies do not fully overlap on purpose.

@@ -65,6 +65,8 @@ export interface HouseholdRepo {
 
 Undo within 4 s appends an `undo` event pointing at the original; it travels the same path. Nothing is ever edited or deleted through the API.
 
+The Schedule tab (issue #64) adds two more event types that travel the same path and never touch points: `schedule` (`taskId`, `refEventId` -- the complete it follows, `dueAt` -- household-local midnight of the due day, `days`), appended when the "Next time?" sheet picks an interval, and `unschedule` (`refEventId` -- the `schedule` event), appended by "bring back early." `deriveSchedule()` in `domain/schedule.ts` turns the two into each task's `listed` / `away` / `due` state, the same way `deriveState` turns the rest into balances.
+
 ## 4. The sheet
 
 One spreadsheet is one household. Five tabs. Row 1 of every tab is the header and matches the Zod field names exactly, so the script can map rows to objects generically. All cells are formatted as plain text; dates are ISO 8601 strings.
