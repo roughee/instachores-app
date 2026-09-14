@@ -8,8 +8,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   createFakeContentService,
-  createFakeDriveApp,
   createFakeLockService,
+  createFakeLogger,
   createFakePropertiesService,
   createFakeSpreadsheetApp,
   FakeSpreadsheet,
@@ -85,8 +85,8 @@ function makeWorld(
   const { PropertiesService } = createFakePropertiesService({ SECRET })
   const { ContentService } = createFakeContentService()
   const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
-  const { DriveApp } = createFakeDriveApp()
-  const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, DriveApp })
+  const { Logger } = createFakeLogger()
+  const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
   const ctx = HomeCrew.makeCtx(ss, LockService, PropertiesService)
   return { ss, HomeCrew, ctx, lockState }
 }
@@ -729,6 +729,168 @@ describe('version', () => {
     const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'version' }))
     expect(res).toEqual({ ok: true, version: HomeCrew.VERSION })
   })
+
+  it('includes sheetSource from the ctx the resolver built (issue #85)', () => {
+    const { HomeCrew, ss } = makeWorld()
+    const { LockService } = createFakeLockService()
+    const { PropertiesService } = createFakePropertiesService({ SECRET })
+    const ctx = HomeCrew.makeCtx(ss, LockService, PropertiesService, 'property')
+    const res = parseResult(HomeCrew.handleRequest(ctx, { secret: SECRET, action: 'version' }))
+    expect(res).toEqual({ ok: true, version: HomeCrew.VERSION, sheetSource: 'property' })
+  })
+})
+
+describe('resolveSpreadsheet_ (issue #85)', () => {
+  function household(): unknown[][] {
+    return [
+      ['key', 'value'],
+      ['v', 1],
+      ['id', 'hh-test'],
+    ]
+  }
+
+  it('opens by id when the SHEET_ID script property is set', () => {
+    const ss = new FakeSpreadsheet({ household: household() }, 'the-real-sheet-id')
+    const { SpreadsheetApp, calls } = createFakeSpreadsheetApp(ss)
+    const { PropertiesService } = createFakePropertiesService({ SECRET, SHEET_ID: 'the-real-sheet-id' })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    const resolved = HomeCrew.resolveSpreadsheet_(SpreadsheetApp, PropertiesService)
+
+    expect(resolved.source).toBe('property')
+    expect(resolved.ss).toBe(ss)
+    expect(calls.openById).toEqual(['the-real-sheet-id'])
+  })
+
+  it('falls back to the active (bound) spreadsheet when SHEET_ID is not set', () => {
+    const ss = new FakeSpreadsheet({ household: household() })
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
+    const { PropertiesService } = createFakePropertiesService({ SECRET })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    const resolved = HomeCrew.resolveSpreadsheet_(SpreadsheetApp, PropertiesService)
+
+    expect(resolved.source).toBe('bound')
+    expect(resolved.ss).toBe(ss)
+  })
+
+  it('throws a config error when neither SHEET_ID nor a bound spreadsheet exist', () => {
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(null)
+    const { PropertiesService } = createFakePropertiesService({ SECRET })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    expect(() => HomeCrew.resolveSpreadsheet_(SpreadsheetApp, PropertiesService)).toThrow(
+      'SHEET_ID script property missing',
+    )
+  })
+})
+
+describe('doPost (issue #85)', () => {
+  function request(body: unknown) {
+    return { postData: { contents: JSON.stringify(body) } }
+  }
+
+  it('answers config, without throwing, when neither SHEET_ID nor a bound spreadsheet exist', () => {
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(null)
+    const { PropertiesService } = createFakePropertiesService({ SECRET })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    const res = parseResult(HomeCrew.doPost(request({ secret: SECRET, action: 'version' })))
+
+    expect(res).toEqual({ ok: false, code: 'config', message: 'SHEET_ID script property missing' })
+  })
+
+  it('opens the sheet by SHEET_ID and reports it on version', () => {
+    const ss = new FakeSpreadsheet(
+      {
+        household: [
+          ['key', 'value'],
+          ['v', 1],
+        ],
+      },
+      'the-real-sheet-id',
+    )
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
+    const { PropertiesService } = createFakePropertiesService({ SECRET, SHEET_ID: 'the-real-sheet-id' })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    const res = parseResult(HomeCrew.doPost(request({ secret: SECRET, action: 'version' })))
+
+    expect(res).toEqual({ ok: true, version: HomeCrew.VERSION, sheetSource: 'property' })
+  })
+})
+
+describe('runTests / test_ (issue #85)', () => {
+  it('runs entirely on scratch tabs, leaving the real tabs untouched, and logs ALL PASS', () => {
+    const householdRows = [
+      ['key', 'value'],
+      ['v', 1],
+      ['id', 'hh-test'],
+      ['name', 'Home'],
+      ['weeklyTarget', 250],
+      ['tz', 'Europe/Vilnius'],
+      ['createdAt', '2026-09-01T00:00:00.000Z'],
+    ]
+    const realTaskRow = [
+      '1',
+      'task-real',
+      'Real task',
+      'kitchen',
+      '2',
+      'daily',
+      'adult',
+      '',
+      '',
+      '',
+      'FALSE',
+      '0',
+      '2026-09-01T00:00:00.000Z',
+      'ana',
+    ]
+    const ss = new FakeSpreadsheet(
+      {
+        household: householdRows,
+        members: MEMBERS_ROWS,
+        tasks: [TASKS_HEADERS, realTaskRow],
+        rewards: [REWARDS_HEADERS],
+        events: [EVENTS_HEADERS],
+      },
+      'the-real-sheet-id',
+    )
+    const beforeNames = ss.getSheets().map((sh) => sh.getName())
+    const beforeSnapshots = new Map(beforeNames.map((name) => [name, ss.getSheetByName(name)!.snapshot()]))
+
+    const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
+    const { PropertiesService } = createFakePropertiesService({ SECRET, SHEET_ID: 'the-real-sheet-id' })
+    const { LockService } = createFakeLockService()
+    const { ContentService } = createFakeContentService()
+    const { Logger, logs } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
+
+    HomeCrew.runTests()
+
+    const afterNames = ss.getSheets().map((sh) => sh.getName())
+    expect(afterNames).toEqual(beforeNames)
+    for (const name of beforeNames) {
+      expect(ss.getSheetByName(name)!.snapshot()).toEqual(beforeSnapshots.get(name))
+    }
+    expect(logs.some((line) => line.includes('ALL PASS'))).toBe(true)
+  })
 })
 
 describe('unknown action', () => {
@@ -883,8 +1045,8 @@ describe('public entry points', () => {
     const { PropertiesService } = createFakePropertiesService({ SECRET })
     const { ContentService } = createFakeContentService()
     const { SpreadsheetApp } = createFakeSpreadsheetApp(ss)
-    const { DriveApp } = createFakeDriveApp()
-    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, DriveApp })
+    const { Logger } = createFakeLogger()
+    const HomeCrew = loadHomeCrew({ SpreadsheetApp, LockService, PropertiesService, ContentService, Logger })
 
     HomeCrew.setupTemplate()
 
