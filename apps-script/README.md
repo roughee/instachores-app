@@ -12,7 +12,8 @@ bound Apps Script web app: one `doPost`, one deployment, one URL. See
   and `runTests()` wrappers for the editor's Run picker. Plain Apps Script JavaScript, V8
   runtime, no modules.
 - `appsscript.json`: manifest (`timeZone: Europe/Vilnius`, `runtimeVersion:
-V8`, web app `executeAs: USER_DEPLOYING`, `access: ANYONE`).
+V8`, web app `executeAs: USER_DEPLOYING`, `access: ANYONE`, `oauthScopes:
+["https://www.googleapis.com/auth/spreadsheets"]`).
 - `.clasp.json.example`: copy to `.clasp.json` and fill in your own
   `scriptId`. The real `.clasp.json` is gitignored; it names a specific
   script and must never be committed.
@@ -77,6 +78,33 @@ To rotate it: change the `SECRET` property and re-share the setup link.
 Every phone that still has the old secret gets `{ ok: false, code:
 'unauthorized' }` until it is updated.
 
+## The sheet id
+
+A second Script Property, `SHEET_ID`, tells `doPost` which spreadsheet to
+open: `SpreadsheetApp.openById(SHEET_ID)` when it is set, falling back to
+`SpreadsheetApp.getActiveSpreadsheet()` (the bound, container spreadsheet)
+when it is not, so a deployment made before this property existed keeps
+working unchanged. Setting it lets the script keep working correctly even
+if it is ever copied onto, or reached through, something other than the
+sheet it was bound to at deploy time; `npm run household -- check` reports
+which path a deployment is using. Set it the same way as `SECRET` (Project
+Settings > Script Properties), with the value being the sheet id from the
+household spreadsheet's own URL, between `/d/` and `/edit`. If neither
+`SHEET_ID` nor a bound spreadsheet resolves to anything, every request
+answers `{ ok: false, code: 'config', message: 'SHEET_ID script property
+missing' }`.
+
+**The oauth scope trade-off.** The manifest asks for
+`https://www.googleapis.com/auth/spreadsheets`, which is broader than "this
+one sheet": with it granted, the script technically _could_ open any
+spreadsheet its owner can access, not only the one named by `SHEET_ID`. The
+code itself only ever opens `SHEET_ID` (or the bound spreadsheet as a
+fallback) -- nothing in `Code.js` reads any other id -- but Apps Script has
+no narrower "just this one spreadsheet" scope to grant instead. This is why
+running the household's script under a dedicated Google account (one that
+owns only the household sheet, nothing else worth protecting) is the
+recommended setup, not a shared personal account.
+
 ## Deploying
 
 The web app's URL is tied to a deployment id, not to the script itself.
@@ -103,12 +131,17 @@ script is a second deployable with its own, rarer cadence than the PWA.
 
 ## Before you deploy: run `runTests`
 
-`test_()` creates a scratch spreadsheet (`SpreadsheetApp.create`), builds
-the template and a couple of members on it, runs every scenario below
-against it through the same `handleRequest`/action-handler code path the
-real web app uses, logs `PASS`/`FAIL` per scenario to the Apps Script
-execution log, and trashes the scratch spreadsheet in a `finally` block
-whether or not everything passed.
+`test_()` runs against the same spreadsheet `doPost` would open (by
+`SHEET_ID`, or the bound spreadsheet, same resolver both use), on a
+disposable set of scratch tabs it creates itself, named `zz_test_<a
+timestamp>_<tab>` (for example `zz_test_1757900000000_events`) so they
+never collide with the household's own `events`, `tasks` and so on. It
+builds the template and a couple of members on those scratch tabs, runs
+every scenario below against them through the same
+`handleRequest`/action-handler code path the real web app uses, logs
+`PASS`/`FAIL` per scenario to the Apps Script execution log, and deletes
+every scratch tab in a `finally` block whether or not everything passed.
+The household's own five tabs are never read from or written to.
 
 To run it: open the Apps Script editor, select `runTests` in the function
 picker, click Run, then check View -> Logs (or the execution transcript)
@@ -121,14 +154,18 @@ Scenarios it checks:
    exactly one row, reports both `appended` and `skipped`, and stamps
    `loggedAt`.
 3. `events.since` returns an array plus a `serverTime`.
-4. `tasks.upsert` with a stale `updatedAt` answers `conflict` and leaves the
+4. `seed` fills empty `tasks`/`rewards` tabs, then refuses a second call.
+5. `tasks.upsert` with a stale `updatedAt` answers `conflict` and leaves the
    stored row unchanged.
-5. `seed` fills empty `tasks`/`rewards` tabs, then refuses a second call.
 6. The script lock is released even when a handler fails partway through
    (simulated by pointing at a broken sheet lookup) — a following
    `tryLock` succeeds immediately.
 
 Run this before every `clasp deploy -i`, and any time `Code.js` changes.
+After a manifest scope change (like the one in issue #85), running any
+function once here, and accepting the consent screen it prompts, is also
+what re-authorises the script -- see docs/Setup.md, "Re-authorise after
+this change".
 
 ## How this gets tested here (in CI)
 
@@ -143,13 +180,15 @@ is built from small in-memory fakes.
 `Code.js` has no `import`/`export` — Apps Script does not support modules —
 so `tests/apps-script/loadHomeCrew.ts` loads the file text with
 `new Function('SpreadsheetApp', 'LockService', 'PropertiesService',
-'ContentService', 'DriveApp', source)`, passing the fakes from
-`tests/apps-script/fakeGas.ts` in as those five parameters. Every function
-in `Code.js` is declared inside that same function body, so they close over
-the fakes exactly as they close over the real globals when Apps Script
-loads the file for real. `Code.js` finishes by assigning its testable
-surface to `globalThis.HomeCrew`; that is the one thing the loader reads
-back out afterwards (and immediately deletes off `globalThis`).
+'ContentService', 'Logger', source)`, passing the fakes from
+`tests/apps-script/fakeGas.ts` in as those five parameters (`Logger` is
+there because `test_()` logs its `PASS`/`FAIL` lines through the real Apps
+Script `Logger` global, which needs a fake the same way the other four do).
+Every function in `Code.js` is declared inside that same function body, so
+they close over the fakes exactly as they close over the real globals when
+Apps Script loads the file for real. `Code.js` finishes by assigning its
+testable surface to `globalThis.HomeCrew`; that is the one thing the loader
+reads back out afterwards (and immediately deletes off `globalThis`).
 
 This was chosen over the alternative (wrapping the whole file as the _body_
 of one `new Function(...)` call and returning an object from it) because
