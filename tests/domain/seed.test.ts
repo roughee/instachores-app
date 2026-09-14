@@ -223,3 +223,48 @@ describe('seed catalog: issue #81 rows', () => {
     }
   })
 })
+
+describe('seed catalog: issue #87 rows', () => {
+  it("adds Sort kids' shoes to kids, monthly, 5 points", () => {
+    const t = byId(SEED_IDS.kidsShoes)
+    expect(t.name).toBe("Sort kids' shoes (outgrown, seasons)")
+    expect(t.category).toBe('kids')
+    expect(t.points).toBe(5)
+    expect(t.freq).toBe('monthly')
+    expect(t.forRole).toBe('adult')
+    expect(t.intervalDays).toBeUndefined()
+    expect(t.parentId).toBeUndefined()
+  })
+
+  it('adds Sort wardrobe to laundry, monthly, 5 points', () => {
+    const t = byId(SEED_IDS.wardrobe)
+    expect(t.name).toBe('Sort wardrobe (seasons, outgrown)')
+    expect(t.category).toBe('laundry')
+    expect(t.points).toBe(5)
+    expect(t.freq).toBe('monthly')
+    expect(t.forRole).toBe('adult')
+    expect(t.intervalDays).toBeUndefined()
+    expect(t.parentId).toBeUndefined()
+  })
+
+  it('adds exactly two new rows, none duplicating an existing task name', () => {
+    const newIds = [SEED_IDS.kidsShoes, SEED_IDS.wardrobe]
+    expect(newIds).toHaveLength(2)
+    expect(new Set(newIds).size).toBe(2)
+
+    const all = tasks()
+    const names = all.map((t) => t.name)
+    expect(new Set(names).size).toBe(names.length)
+
+    // Distinct from the existing kids' clothes sort and the laundry put-away step.
+    expect(names).toContain("Sort kids' clothes (outgrown, seasons)")
+    expect(names).toContain('Put folded clothes away')
+  })
+
+  it('every new id actually resolves to a seeded task', () => {
+    const ids = new Set(tasks().map((t) => t.id))
+    for (const id of [SEED_IDS.kidsShoes, SEED_IDS.wardrobe]) {
+      expect(ids.has(id)).toBe(true)
+    }
+  })
+})
