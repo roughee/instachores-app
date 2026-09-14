@@ -108,9 +108,11 @@ Request envelope:
 | `rewards.upsert` | `reward` | `reward` | Same rule |
 | `household.update` | partial household | household | Name, weekly target, tz |
 | `seed` | tasks, rewards | counts | Only when the tabs are empty. Used once in Phase 1 from `seed.ts` |
-| `version` | none | script version | Shown in the Sync panel |
+| `version` | none | script version, `sheetSource` (`property`/`bound`) | Shown in the Sync panel |
 
-Errors are `{ ok: false, code, message }` with `code` in `unauthorized` (401), `conflict` (409), `invalid` (400), `locked` (503, lock not acquired within 10 s). The client treats `locked` and any network failure as retryable and everything else as final.
+Errors are `{ ok: false, code, message }` with `code` in `unauthorized` (401), `conflict` (409), `invalid` (400), `locked` (503, lock not acquired within 10 s), `config` (500, the household spreadsheet could not be resolved, issue #85). The client treats `locked` and any network failure as retryable and everything else as final.
+
+`doPost` opens the household spreadsheet by the `SHEET_ID` Script Property when it is set (`SpreadsheetApp.openById(SHEET_ID)`), falling back to the bound (container) spreadsheet (`SpreadsheetApp.getActiveSpreadsheet()`) when it is not, so a deployment made before this existed keeps working unchanged. `config` is what a request answers when neither yields a spreadsheet.
 
 Skeleton of `Code.js`:
 

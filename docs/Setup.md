@@ -11,8 +11,8 @@ Read first: `docs/Architecture.md` §4 (the sheet), §5 (the Apps Script API), �
 3. Paste the contents of `apps-script/Code.js` into the editor's `Code.gs`, and paste `apps-script/appsscript.json` into the manifest (the gear icon > "Show appsscript.json" if it is not already visible). If you have `clasp` set up instead, `clasp push` from `apps-script/` does the same thing.
 4. In the function picker at the top of the editor, choose `setupTemplate` and click Run. (The picker only lists functions whose names do not end in an underscore, so the private `setupTemplate_` helper is deliberately not there.) Authorize the script when prompted (it is your own script acting on your own sheet). This creates the five tabs with header rows and plain-text formatting; it is safe to re-run.
 5. Deploy the script as a web app: **Deploy > New deployment**, type "Web app", execute as **Me**, who has access **Anyone**. Click Deploy and copy the web app URL and the deployment id it shows. Write the deployment id (not the secret) into `apps-script/README.md` where the next deploy will look for it.
-6. Run `npm run household -- secret`. It prints a fresh secret and the exact steps to store it as the Script Property `SECRET` in the Apps Script editor (Project Settings > Script Properties). Do that now.
-7. Run `npm run household -- check --url <the web app URL> --secret <the secret>`. It should print two `PASS` lines: the right secret is accepted, a wrong one is rejected. If either says `FAIL`, fix the Script Property before continuing.
+6. Run `npm run household -- secret`. It prints a fresh secret and the exact steps to store it as the Script Property `SECRET` in the Apps Script editor (Project Settings > Script Properties), plus the steps for a second property, `SHEET_ID`: the sheet id from the spreadsheet's own URL, the part between `/d/` and `/edit`. Do both now. `SHEET_ID` tells the script exactly which spreadsheet to open (`SpreadsheetApp.openById`) instead of relying on the script staying bound to this one sheet; leaving it unset falls back to the bound spreadsheet, which is why the sheet still works if you skip it, but setting it is the more robust choice and what `check` (below) expects to see.
+7. Run `npm run household -- check --url <the web app URL> --secret <the secret>`. It should print two `PASS` lines: the right secret is accepted, a wrong one is rejected. It also prints a `sheet:` line saying whether it opened the sheet by `SHEET_ID` or fell back to the bound spreadsheet. If either `PASS`/`FAIL` line says `FAIL`, fix the Script Property before continuing.
 8. If the Phase 0 session changed any point value from what is in `src/domain/seed.ts`, edit the `ROWS` array there first (that file is what the `seed` command sends) and run `npm run check` before continuing, so the catalog it seeds already carries the agreed values. A handful of rows also carry an `intervalDays` (Fridge cleanout, Vacuum, Mop, Clean bathroom, and so on): the `seed` command sends it straight through for the rows that have one, and leaves it blank for the rows that don't.
 9. Run `npm run household -- seed --url <the web app URL> --secret <the secret>`. It asks for confirmation before sending; answer `y`. It refuses cleanly (and sends nothing) if the tabs already have rows, so it is safe to run again on a truly empty sheet.
 10. Run `npm run household -- members --adult <uid>:<Name>:<#hex> --adult <uid>:<Name>:<#hex> --kid <uid>:<Name>:<#hex>` with the two adults' and the kid's chosen slugs, names and colors (a slug is a short lowercase word like `ana`, `ben`, `mia`; colors are 6-digit hex like `#128369`). Paste the rows it prints under the header row of the sheet's `members` tab by hand. There is no API action for this; the members tab is always edited directly.
@@ -103,9 +103,20 @@ Do this whenever `apps-script/Code.js` or `apps-script/appsscript.json` changes.
 2. Update the existing deployment rather than creating a new one, so the URL (and every setup link already handed out) keeps working: `clasp push && clasp deploy -i <the deployment id from apps-script/README.md>`. Without a UI for this, use **Deploy > Manage deployments**, pick the existing deployment, click the pencil to edit it, and choose "New version" instead of "New deployment".
 3. Run `npm run household -- check --url <the web app URL> --secret <the secret>` once more to confirm the redeployed script still answers correctly.
 
+### Re-authorise after this change
+
+Issue #85 added `oauthScopes` to `apps-script/appsscript.json`. A manifest
+scope change means the script's existing authorisation no longer covers
+what it asks for, so before running step 2 above, open the Apps Script
+editor and run any function once (`runTests` is the obvious choice, since
+step 1 already asks for it) and accept the consent screen it prompts. Skip
+this and the deployed web app answers every request with an authorisation
+error instead of running at all.
+
 ## Troubleshooting
 
 - `check` fails both lines: the web app URL is wrong, or the deployment's access is not set to "Anyone". Re-check step 5.
 - `check` fails only the wrong-secret line: the Script Property `SECRET` is empty or missing. Re-check step 6.
+- `check` (or any other call) answers `code: 'config'`: neither the `SHEET_ID` Script Property nor a bound spreadsheet resolved to a sheet. Re-check step 6, or re-check step 2 if the script somehow lost its binding.
 - `seed` refuses with "tasks and/or rewards tab already has rows": clear both tabs by hand (keep the header row) if you meant to start over, then run `seed` again -- or, to add the rows the sheet is missing without clearing anything, run `seed --append` instead (see "Adding new catalog rows to an existing sheet" above).
 - `members` rejects a spec: it prints exactly which part failed (an invalid hex color, an empty name, and so on); fix that one `--adult`/`--kid` argument and rerun.

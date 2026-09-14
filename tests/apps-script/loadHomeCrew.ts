@@ -7,8 +7,11 @@
  * require. To reach it from Node without a build step, this evaluates the
  * file text with `new Function`, passing the Apps Script globals
  * (`SpreadsheetApp`, `LockService`, `PropertiesService`, `ContentService`,
- * `DriveApp`) in as parameters so Code.js's top-level functions close over
+ * `Logger`) in as parameters so Code.js's top-level functions close over
  * the fakes exactly as they close over the real services in production.
+ * `Logger` is here (issue #85) because `test_()` logs its PASS/FAIL lines
+ * through the real Apps Script `Logger` global, which this loader must
+ * supply a fake for the same way it does the other four.
  * Code.js finishes by assigning its testable surface to
  * `globalThis.HomeCrew`, which is the only thing that survives the call.
  * See apps-script/README.md ("How this gets tested") for the rationale.
@@ -27,9 +30,19 @@ export interface HomeCrewNamespace {
   rowToObject: (headers: string[], row: unknown[]) => Record<string, unknown>
   objectToRow: (headers: string[], obj: Record<string, unknown>) => unknown[]
   readTable: (sheet: unknown) => { headers: string[]; objects: Record<string, unknown>[] }
-  makeCtx: (ss: unknown, LockServiceRef: unknown, PropertiesServiceRef: unknown) => unknown
+  resolveSpreadsheet_: (
+    SpreadsheetAppRef: unknown,
+    PropertiesServiceRef: unknown,
+  ) => { ss: unknown; source: 'property' | 'bound' }
+  makeCtx: (
+    ss: unknown,
+    LockServiceRef: unknown,
+    PropertiesServiceRef: unknown,
+    sheetSource?: 'property' | 'bound',
+  ) => unknown
   handleRequest: (ctx: unknown, req: unknown) => { setMimeType(mime: string): unknown; getContent(): string }
-  setupTemplate_: (ss: unknown) => unknown
+  doPost: (e: { postData: { contents: string } }) => { setMimeType(mime: string): unknown; getContent(): string }
+  setupTemplate_: (ss: unknown, prefix?: string) => unknown
   setupTemplate: () => unknown
   runTests: () => void
 }
@@ -39,10 +52,10 @@ export function loadHomeCrew(gas: {
   LockService: unknown
   PropertiesService: unknown
   ContentService: unknown
-  DriveApp: unknown
+  Logger: unknown
 }): HomeCrewNamespace {
-  const run = new Function('SpreadsheetApp', 'LockService', 'PropertiesService', 'ContentService', 'DriveApp', SOURCE)
-  run(gas.SpreadsheetApp, gas.LockService, gas.PropertiesService, gas.ContentService, gas.DriveApp)
+  const run = new Function('SpreadsheetApp', 'LockService', 'PropertiesService', 'ContentService', 'Logger', SOURCE)
+  run(gas.SpreadsheetApp, gas.LockService, gas.PropertiesService, gas.ContentService, gas.Logger)
   const globalAny = globalThis as unknown as { HomeCrew?: HomeCrewNamespace }
   const HomeCrew = globalAny.HomeCrew
   delete globalAny.HomeCrew

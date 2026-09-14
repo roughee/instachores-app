@@ -19,6 +19,10 @@
  *      This is what both `doPost` and the tests call.
  *   5. Apps Script entry points: `doPost`, `setupTemplate_`, `test_`. These
  *      are the only things that reach out to the real global services.
+ *      `resolveSpreadsheet_` (issue #85) is what `doPost` and `test_` both
+ *      use to find the household spreadsheet: by the `SHEET_ID` Script
+ *      Property when it is set, falling back to the bound (container)
+ *      spreadsheet otherwise.
  *   6. `globalThis.HomeCrew = {...}` — see "How this gets tested" below.
  *
  * How this gets tested
@@ -27,7 +31,7 @@
  * `export` (Apps Script does not support modules), so
  * tests/apps-script/loadHomeCrew.ts loads this file into Vitest with
  * `new Function('SpreadsheetApp', 'LockService', 'PropertiesService',
- * 'ContentService', 'DriveApp', source)`, passing in fakes for those five
+ * 'ContentService', 'Logger', source)`, passing in fakes for those five
  * parameters (tests/apps-script/fakeGas.ts). The functions below are
  * declared inside that same `new Function` body, so they close over the
  * fakes exactly as they close over the real globals when Apps Script loads
@@ -368,7 +372,7 @@ function seed(ctx, params) {
 }
 
 function version(ctx, params) {
-  return { version: VERSION }
+  return { version: VERSION, sheetSource: ctx.sheetSource }
 }
 
 var ACTIONS = {
@@ -387,13 +391,15 @@ var ACTIONS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds the seam handlers depend on: `sheet(name)`, `lock()`, `secret()`.
- * `ss` is a Spreadsheet (real or fake); `LockServiceRef`/`PropertiesServiceRef`
- * are passed in rather than read from the closure so the same code runs in
+ * Builds the seam handlers depend on: `sheet(name)`, `lock()`, `secret()`,
+ * plus `sheetSource` for the `version` action to report. `ss` is a
+ * Spreadsheet (real or fake); `LockServiceRef`/`PropertiesServiceRef` are
+ * passed in rather than read from the closure so the same code runs in
  * production and in tests.
  */
-function makeCtx(ss, LockServiceRef, PropertiesServiceRef) {
+function makeCtx(ss, LockServiceRef, PropertiesServiceRef, sheetSource) {
   return {
+    sheetSource: sheetSource,
     sheet: function (name) {
       var sh = ss.getSheetByName(name)
       if (!sh) throw apiError('invalid', 'missing tab: ' + name)
@@ -406,6 +412,26 @@ function makeCtx(ss, LockServiceRef, PropertiesServiceRef) {
       return PropertiesServiceRef.getScriptProperties().getProperty('SECRET')
     },
   }
+}
+
+/**
+ * Finds the household spreadsheet (issue #85): opens it by id when the
+ * `SHEET_ID` Script Property is set, so the script does not depend on
+ * being bound to one particular sheet; falls back to the bound (container)
+ * spreadsheet otherwise, so a deployment made before this change, with no
+ * `SHEET_ID` property, keeps working unchanged. Throws a `config` error
+ * when neither yields a spreadsheet -- `doPost` turns that into
+ * `{ ok: false, code: 'config', message: ... }` without ever throwing out
+ * of itself.
+ */
+function resolveSpreadsheet_(SpreadsheetAppRef, PropertiesServiceRef) {
+  var sheetId = PropertiesServiceRef.getScriptProperties().getProperty('SHEET_ID')
+  if (sheetId) {
+    return { ss: SpreadsheetAppRef.openById(sheetId), source: 'property' }
+  }
+  var active = SpreadsheetAppRef.getActiveSpreadsheet ? SpreadsheetAppRef.getActiveSpreadsheet() : null
+  if (!active) throw apiError('config', 'SHEET_ID script property missing')
+  return { ss: active, source: 'bound' }
 }
 
 /**
@@ -436,7 +462,12 @@ function jsonOutput(obj) {
 // 5. Apps Script entry points
 // ---------------------------------------------------------------------------
 
-/** The web app entry point. Apps Script only supports doPost/doGet as globals bound to the deployment. */
+/**
+ * The web app entry point. Apps Script only supports doPost/doGet as
+ * globals bound to the deployment. Never throws: a bad body is caught here,
+ * a spreadsheet that cannot be resolved (issue #85) is caught here too, and
+ * everything else is caught inside handleRequest.
+ */
 function doPost(e) {
   var req
   try {
@@ -444,7 +475,13 @@ function doPost(e) {
   } catch (err) {
     return jsonOutput({ ok: false, code: 'invalid', message: 'body is not valid JSON' })
   }
-  var ctx = makeCtx(SpreadsheetApp.getActiveSpreadsheet(), LockService, PropertiesService)
+  var resolved
+  try {
+    resolved = resolveSpreadsheet_(SpreadsheetApp, PropertiesService)
+  } catch (err) {
+    return jsonOutput({ ok: false, code: err.code || 'config', message: String((err && err.message) || err) })
+  }
+  var ctx = makeCtx(resolved.ss, LockService, PropertiesService, resolved.source)
   return handleRequest(ctx, req)
 }
 
@@ -453,9 +490,16 @@ function doPost(e) {
  * marks their columns as plain text. Run once from the script editor
  * against a brand-new spreadsheet to produce the household's sheet from the
  * template (see apps-script/README.md).
+ *
+ * `prefix` (issue #85) namespaces the five tab names it creates, e.g.
+ * `zz_test_1757900000000_events` instead of `events` -- how `test_()` below
+ * builds a disposable set of tabs on the real, configured spreadsheet
+ * instead of a scratch spreadsheet of its own. The public `setupTemplate()`
+ * wrapper always calls this with no prefix.
  */
-function setupTemplate_(ss) {
+function setupTemplate_(ss, prefix) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet()
+  prefix = prefix || ''
   var tabs = {
     household: HEADERS.household,
     members: HEADERS.members,
@@ -465,7 +509,8 @@ function setupTemplate_(ss) {
   }
   Object.keys(tabs).forEach(function (name) {
     var headers = tabs[name]
-    var sh = ss.getSheetByName(name) || ss.insertSheet(name)
+    var tabName = prefix + name
+    var sh = ss.getSheetByName(tabName) || ss.insertSheet(tabName)
     sh.getRange(1, 1, 1, headers.length).setValues([headers])
     sh.getRange(1, 1, 2000, headers.length).setNumberFormat('@')
     if (sh.setFrozenRows) sh.setFrozenRows(1)
@@ -494,13 +539,21 @@ function runTests() {
 }
 
 /**
- * Runs the acceptance scenarios against a scratch spreadsheet, logs
- * PASS/FAIL per scenario, and trashes the scratch file when done. Run this
- * from the Apps Script editor (select `test_`, then Run) before every
- * deploy. See apps-script/README.md, "Before you deploy".
+ * Runs the acceptance scenarios against scratch tabs on the *configured*
+ * spreadsheet (the same one `resolveSpreadsheet_` gives `doPost`, issue
+ * #85) instead of a spreadsheet of its own -- so the script never needs
+ * a Drive dependency or a "create a spreadsheet" permission, only the ability to
+ * open and edit the one sheet it is already trusted with. Every tab it
+ * touches is created fresh under a `zz_test_<timestamp>_` prefix and
+ * deleted again in the `finally` block; the household's own five tabs are
+ * never read from or written to. Logs PASS/FAIL per scenario. Run this from
+ * the Apps Script editor (select `test_`, then Run) before every deploy.
+ * See apps-script/README.md, "Before you deploy".
  */
 function test_() {
-  var ss = SpreadsheetApp.create('homecrew-test-scratch-' + new Date().getTime())
+  var resolved = resolveSpreadsheet_(SpreadsheetApp, PropertiesService)
+  var ss = resolved.ss
+  var prefix = 'zz_test_' + new Date().getTime() + '_'
   var results = []
   function check(name, ok, detail) {
     results.push({ name: name, ok: !!ok, detail: detail })
@@ -508,15 +561,15 @@ function test_() {
   }
 
   try {
-    setupTemplate_(ss)
-    var members = ss.getSheetByName('members')
+    setupTemplate_(ss, prefix)
+    var members = ss.getSheetByName(prefix + 'members')
     members.getRange(2, 1, 2, HEADERS.members.length).setValues([
       ['ana', 'Ana', '#1f8a70', 'adult'],
       ['ben', 'Ben', '#3f6fd4', 'adult'],
     ])
     var ctx = {
       sheet: function (name) {
-        var sh = ss.getSheetByName(name)
+        var sh = ss.getSheetByName(prefix + name)
         if (!sh) throw apiError('invalid', 'missing tab: ' + name)
         return sh
       },
@@ -529,7 +582,7 @@ function test_() {
     }
 
     // 1. Wrong secret is rejected and touches nothing.
-    var eventsBefore = readTable(ss.getSheetByName('events')).objects.length
+    var eventsBefore = readTable(ctx.sheet('events')).objects.length
     var wrong = JSON.parse(
       handleRequest(ctx, {
         secret: 'nope',
@@ -541,7 +594,7 @@ function test_() {
       'wrong secret is rejected and touches nothing',
       wrong.ok === false &&
         wrong.code === 'unauthorized' &&
-        readTable(ss.getSheetByName('events')).objects.length === eventsBefore,
+        readTable(ctx.sheet('events')).objects.length === eventsBefore,
     )
 
     // 2. events.append: two duplicates, one new -> exactly one row appended.
@@ -556,7 +609,7 @@ function test_() {
       points: 2,
     }
     handleRequest(ctx, { secret: 'scratch-secret', action: 'events.append', events: [e1] })
-    var afterFirst = readTable(ss.getSheetByName('events')).objects.length
+    var afterFirst = readTable(ctx.sheet('events')).objects.length
     var appendRes = JSON.parse(
       handleRequest(ctx, {
         secret: 'scratch-secret',
@@ -577,7 +630,7 @@ function test_() {
         ],
       }).getContent(),
     )
-    var afterSecond = readTable(ss.getSheetByName('events')).objects.length
+    var afterSecond = readTable(ctx.sheet('events')).objects.length
     check(
       'events.append appends exactly one new row and reports appended+skipped',
       appendRes.appended.length === 1 &&
@@ -595,34 +648,10 @@ function test_() {
       Array.isArray(sinceRes.events) && !!sinceRes.serverTime,
     )
 
-    // 4. tasks.upsert: stale updatedAt is a conflict and leaves the row unchanged.
-    var task = {
-      v: 1,
-      id: 'task-1',
-      name: 'Pots',
-      category: 'kitchen',
-      points: 2,
-      freq: 'daily',
-      forRole: 'adult',
-      archived: false,
-      sort: 0,
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'ana',
-    }
-    handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: task })
-    var stale = Object.assign({}, task, { name: 'Renamed', updatedAt: '2000-01-01T00:00:00.000Z' })
-    var conflictRes = JSON.parse(
-      handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: stale }).getContent(),
-    )
-    var storedTask = readTable(ss.getSheetByName('tasks')).objects.filter(function (t) {
-      return t.id === 'task-1'
-    })[0]
-    check(
-      'tasks.upsert conflicts on a stale updatedAt and leaves the row unchanged',
-      conflictRes.ok === false && conflictRes.code === 'conflict' && storedTask.name === 'Pots',
-    )
-
-    // 5. seed fills empty tabs, then refuses a second time.
+    // 4. seed fills empty tabs, then refuses a second time. Runs before the
+    // tasks.upsert scenario below on purpose: that one puts a row in the
+    // scratch tasks tab, which would make seed's "tabs must be empty" check
+    // refuse it.
     var seedRes = JSON.parse(
       handleRequest(ctx, {
         secret: 'scratch-secret',
@@ -648,6 +677,33 @@ function test_() {
     check(
       'seed fills empty tabs then refuses once seeded',
       seedRes.ok === true && seedRes.rewards === 1 && reseedRes.ok === false && reseedRes.code === 'invalid',
+    )
+
+    // 5. tasks.upsert: stale updatedAt is a conflict and leaves the row unchanged.
+    var task = {
+      v: 1,
+      id: 'task-1',
+      name: 'Pots',
+      category: 'kitchen',
+      points: 2,
+      freq: 'daily',
+      forRole: 'adult',
+      archived: false,
+      sort: 0,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'ana',
+    }
+    handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: task })
+    var stale = Object.assign({}, task, { name: 'Renamed', updatedAt: '2000-01-01T00:00:00.000Z' })
+    var conflictRes = JSON.parse(
+      handleRequest(ctx, { secret: 'scratch-secret', action: 'tasks.upsert', task: stale }).getContent(),
+    )
+    var storedTask = readTable(ctx.sheet('tasks')).objects.filter(function (t) {
+      return t.id === 'task-1'
+    })[0]
+    check(
+      'tasks.upsert conflicts on a stale updatedAt and leaves the row unchanged',
+      conflictRes.ok === false && conflictRes.code === 'conflict' && storedTask.name === 'Pots',
     )
 
     // 6. Lock is released on an error path: force a broken sheet lookup mid-handler.
@@ -686,9 +742,15 @@ function test_() {
     check('the lock is released on an error path', failing.ok === false && lockAcquiredBeforeTest && lockFreeAfter)
   } finally {
     try {
-      DriveApp.getFileById(ss.getId()).setTrashed(true)
+      ss.getSheets()
+        .filter(function (sh) {
+          return sh.getName().indexOf(prefix) === 0
+        })
+        .forEach(function (sh) {
+          ss.deleteSheet(sh)
+        })
     } catch (cleanupErr) {
-      Logger.log('could not trash scratch spreadsheet: ' + cleanupErr)
+      Logger.log('could not remove scratch tabs: ' + cleanupErr)
     }
   }
 
@@ -711,8 +773,10 @@ if (typeof globalThis !== 'undefined') {
     objectToRow: objectToRow,
     readTable: readTable,
     appendRows: appendRows,
+    resolveSpreadsheet_: resolveSpreadsheet_,
     makeCtx: makeCtx,
     handleRequest: handleRequest,
+    doPost: doPost,
     setupTemplate_: setupTemplate_,
     setupTemplate: setupTemplate,
     runTests: runTests,

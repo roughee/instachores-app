@@ -17,6 +17,7 @@ import {
   flagValues,
   formatAppendDryRun,
   formatMembersTable,
+  formatSecretInstructions,
   formatSeedDryRun,
   generateSecret,
   hasFlag,
@@ -90,6 +91,22 @@ describe('generateSecret', () => {
 
   it('is different on every call', () => {
     expect(generateSecret()).not.toBe(generateSecret())
+  })
+})
+
+describe('formatSecretInstructions (issue #85)', () => {
+  it('includes the SECRET steps and the value itself', () => {
+    const text = formatSecretInstructions('a-fresh-secret-value')
+
+    expect(text).toContain('SECRET')
+    expect(text).toContain('a-fresh-secret-value')
+    expect(text).toContain('Script Properties')
+  })
+
+  it('also documents the SHEET_ID property', () => {
+    const text = formatSecretInstructions('a-fresh-secret-value')
+
+    expect(text).toContain('SHEET_ID')
   })
 })
 
@@ -213,6 +230,24 @@ describe('evaluateCheckResults', () => {
 
     expect(summary.allPass).toBe(false)
     expect(() => evaluateCheckResults(undefined, null)).not.toThrow()
+  })
+
+  it('reports the sheet opened by SHEET_ID (issue #85)', () => {
+    const summary = evaluateCheckResults(
+      { ok: true, version: '1.0.0', sheetSource: 'property' },
+      { ok: false, code: 'unauthorized' },
+    )
+
+    expect(summary.sheetLine).toBe('sheet: opened by SHEET_ID')
+  })
+
+  it('reports the bound-spreadsheet fallback with a hint to pin it (issue #85)', () => {
+    const summary = evaluateCheckResults(
+      { ok: true, version: '1.0.0', sheetSource: 'bound' },
+      { ok: false, code: 'unauthorized' },
+    )
+
+    expect(summary.sheetLine).toBe('sheet: bound spreadsheet (set SHEET_ID to pin it)')
   })
 })
 

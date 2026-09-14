@@ -89,10 +89,11 @@ export class FakeSheet {
 
 export class FakeSpreadsheet {
   private readonly sheets = new Map<string, FakeSheet>()
-  private id = 'fake-spreadsheet'
+  private readonly id: string
 
-  constructor(tabs: Record<string, unknown[][]> = {}) {
+  constructor(tabs: Record<string, unknown[][]> = {}, id = 'fake-spreadsheet') {
     Object.entries(tabs).forEach(([name, rows]) => this.sheets.set(name, new FakeSheet(name, rows)))
+    this.id = id
   }
 
   getId(): string {
@@ -107,6 +108,10 @@ export class FakeSpreadsheet {
     const sh = new FakeSheet(name)
     this.sheets.set(name, sh)
     return sh
+  }
+
+  deleteSheet(sh: FakeSheet): void {
+    this.sheets.delete(sh.getName())
   }
 
   getSheets(): FakeSheet[] {
@@ -188,23 +193,48 @@ export function createFakeContentService(): {
   }
 }
 
-export function createFakeDriveApp(): {
-  DriveApp: { getFileById: (id: string) => { setTrashed: (v: boolean) => void } }
-} {
-  return {
-    DriveApp: {
-      getFileById: (_id: string) => ({ setTrashed: (_v: boolean) => undefined }),
-    },
-  }
+/** Tracks calls so tests can assert exactly which sheet id was opened. */
+export interface FakeSpreadsheetAppCalls {
+  openById: string[]
 }
 
-export function createFakeSpreadsheetApp(active: FakeSpreadsheet): {
-  SpreadsheetApp: { getActiveSpreadsheet: () => FakeSpreadsheet; create: (name: string) => FakeSpreadsheet }
+/**
+ * `active` is also what `openById` answers when asked for its own id
+ * (`active.getId()`, issue #85) -- matching the real API's "any id, if it's
+ * yours" semantics closely enough for the resolver's tests. Pass `null` for
+ * a script with no bound spreadsheet at all. Any other id throws, same as
+ * a real, inaccessible or nonexistent spreadsheet id would.
+ */
+export function createFakeSpreadsheetApp(active: FakeSpreadsheet | null): {
+  SpreadsheetApp: {
+    getActiveSpreadsheet: () => FakeSpreadsheet | null
+    openById: (id: string) => FakeSpreadsheet
+  }
+  calls: FakeSpreadsheetAppCalls
 } {
+  const calls: FakeSpreadsheetAppCalls = { openById: [] }
   return {
     SpreadsheetApp: {
       getActiveSpreadsheet: () => active,
-      create: (_name: string) => new FakeSpreadsheet(),
+      openById: (id: string) => {
+        calls.openById.push(id)
+        if (active && id === active.getId()) return active
+        throw new Error(`no fake spreadsheet for id ${id}`)
+      },
     },
+    calls,
+  }
+}
+
+/** Captures every `Logger.log` call so a test can assert on `runTests`' output without a real Apps Script logger. */
+export function createFakeLogger(): { Logger: { log: (message: string) => void }; logs: string[] } {
+  const logs: string[] = []
+  return {
+    Logger: {
+      log: (message: string) => {
+        logs.push(String(message))
+      },
+    },
+    logs,
   }
 }
