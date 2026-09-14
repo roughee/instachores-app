@@ -139,6 +139,31 @@ export function generateSecret(): string {
   return randomBytes(24).toString('base64url')
 }
 
+/**
+ * The steps `secret` prints for storing the fresh value as the `SECRET`
+ * Script Property, plus the `SHEET_ID` property (issue #85): the id from the
+ * household spreadsheet's own URL, between `/d/` and `/edit`. Setting it
+ * lets the deployed script open that sheet by id instead of relying on
+ * being bound to it; leaving it unset keeps today's bound-spreadsheet
+ * behaviour.
+ */
+export function formatSecretInstructions(secret: string): string {
+  return [
+    'Store it as a Script Property so the deployed script accepts it:',
+    '  1. Open the household spreadsheet, then Extensions > Apps Script.',
+    '  2. Project Settings (the gear icon) > Script Properties > Add script property.',
+    '  3. Property: SECRET',
+    `  4. Value:    ${secret}`,
+    '  5. Save script properties.',
+    '',
+    'While there, also add a SHEET_ID property so the script opens this exact sheet:',
+    '  1. Property: SHEET_ID',
+    '  2. Value:    <the sheet id, from the spreadsheet URL between /d/ and /edit>',
+    '  3. Save script properties.',
+    'Without SHEET_ID, the script falls back to the spreadsheet it is bound to.',
+  ].join('\n')
+}
+
 // ---------------------------------------------------------------------------
 // members
 // ---------------------------------------------------------------------------
@@ -193,11 +218,25 @@ export interface CheckOutcome {
 export interface CheckSummary {
   outcomes: CheckOutcome[]
   allPass: boolean
+  /** One readable line reporting which spreadsheet the script opened (issue #85). */
+  sheetLine: string
 }
+
+const SHEET_SOURCE_LINES: Record<'property' | 'bound', string> = {
+  property: 'sheet: opened by SHEET_ID',
+  bound: 'sheet: bound spreadsheet (set SHEET_ID to pin it)',
+}
+
+/**
+ * What `sheetLine` reports when the deployed script's `version` response has
+ * no `sheetSource` at all -- an older deployment made before issue #85, which
+ * `check` should still run against without crashing.
+ */
+const UNKNOWN_SHEET_SOURCE_LINE = 'sheet: unknown (redeploy the script to report which sheet it opened)'
 
 /** Pure evaluation of the two `version` responses `check` collects: right secret ok, wrong secret unauthorized. */
 export function evaluateCheckResults(rightSecretResponse: unknown, wrongSecretResponse: unknown): CheckSummary {
-  const right = rightSecretResponse as { ok?: unknown; version?: unknown } | null | undefined
+  const right = rightSecretResponse as { ok?: unknown; version?: unknown; sheetSource?: unknown } | null | undefined
   const rightOk = right != null && right.ok === true && typeof right.version === 'string'
   const rightOutcome: CheckOutcome = {
     name: 'the right secret is accepted',
@@ -215,8 +254,12 @@ export function evaluateCheckResults(rightSecretResponse: unknown, wrongSecretRe
     detail: wrongOk ? 'code unauthorized' : `unexpected response ${JSON.stringify(wrongSecretResponse)}`,
   }
 
+  const sheetSource = right?.sheetSource
+  const sheetLine =
+    sheetSource === 'property' || sheetSource === 'bound' ? SHEET_SOURCE_LINES[sheetSource] : UNKNOWN_SHEET_SOURCE_LINE
+
   const outcomes = [rightOutcome, wrongOutcome]
-  return { outcomes, allPass: outcomes.every((o) => o.ok) }
+  return { outcomes, allPass: outcomes.every((o) => o.ok), sheetLine }
 }
 
 // ---------------------------------------------------------------------------
@@ -504,12 +547,7 @@ function cmdSecret(): number {
   const secret = generateSecret()
   console.log(secret)
   console.log('')
-  console.log('Store it as a Script Property so the deployed script accepts it:')
-  console.log('  1. Open the household spreadsheet, then Extensions > Apps Script.')
-  console.log('  2. Project Settings (the gear icon) > Script Properties > Add script property.')
-  console.log('  3. Property: SECRET')
-  console.log(`  4. Value:    ${secret}`)
-  console.log('  5. Save script properties.')
+  console.log(formatSecretInstructions(secret))
   console.log('')
   console.log('This is the only place the secret is printed. It does not go in the repo, the sheet, or the built app.')
   return 0
@@ -535,6 +573,7 @@ async function cmdCheck(args: ParsedArgs): Promise<number> {
   for (const outcome of summary.outcomes) {
     console.log(`${outcome.ok ? 'PASS' : 'FAIL'} - ${outcome.name} (${outcome.detail})`)
   }
+  console.log(summary.sheetLine)
 
   console.log('')
   console.log('Schedule columns (issue #67):')
