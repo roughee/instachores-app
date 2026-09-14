@@ -99,8 +99,10 @@ missing' }`.
 one sheet": with it granted, the script technically _could_ open any
 spreadsheet its owner can access, not only the one named by `SHEET_ID`. The
 code itself only ever opens `SHEET_ID` (or the bound spreadsheet as a
-fallback) -- nothing in `Code.js` reads any other id -- but Apps Script has
-no narrower "just this one spreadsheet" scope to grant instead. This is why
+fallback) -- nothing in `Code.js` reads any other id. The narrower scope,
+`.../auth/spreadsheets.currentonly`, only covers the spreadsheet a script
+is bound to, so it cannot be used together with `openById`: opening by
+`SHEET_ID` and the broad scope go together. This is why
 running the household's script under a dedicated Google account (one that
 owns only the household sheet, nothing else worth protecting) is the
 recommended setup, not a shared personal account.
